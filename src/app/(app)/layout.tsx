@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh bg-slate-50">
       <TopBar householdName={household?.name ?? ''} />
-      <main className="mx-auto max-w-lg px-4 pb-24 pt-4">{children}</main>
+      <main className="mx-auto max-w-lg px-4 pb-24 pt-4 md:max-w-2xl lg:max-w-3xl">{children}</main>
       <BottomNav />
     </div>
   );

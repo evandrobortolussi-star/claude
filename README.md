@@ -10,6 +10,9 @@ Este repositório está sendo construído em etapas.
   recorrência), transferências e pagamento de fatura.
 - **Etapa 3** (concluída): importação de extratos (CSV/OFX), tela de revisão
   e classificação com aprendizado de regras por estabelecimento.
+- **Etapa 4** (concluída): dashboard mensal — resumo, gastos por
+  responsável/categoria, evolução, ranking de maiores despesas, filtros e
+  indicadores de vencimento/sem-categoria.
 
 ## Stack
 
@@ -191,7 +194,12 @@ nesta base de dados.
   confirmar cada movimentação importada (categoria → responsável →
   confirmar), com aviso de possível duplicata; `/import/rules` — gerenciar
   as regras de classificação aprendidas.
-- `/dashboard` — ainda "em breve": o resumo visual fica para uma próxima etapa.
+- `/dashboard` — visão mensal: recebido/gasto/saldo, gastos por
+  Casal/Cônjuge 1/Cônjuge 2 (toque para filtrar), despesas por categoria
+  (gráfico + lista "Onde gastamos nosso dinheiro?", toque numa categoria
+  abre os lançamentos), evolução dos últimos 6 meses, ranking das maiores
+  despesas, aviso de faturas/parcelas vencendo em até 7 dias, aviso de
+  despesas sem categoria, e filtros por responsável/conta/cartão/categoria.
 
 ## Scripts
 

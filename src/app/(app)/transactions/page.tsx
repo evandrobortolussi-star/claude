@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { createTransaction, deleteTransaction } from './actions';
 import { TransactionForm } from './TransactionForm';
+import type { ExpenseScope } from '@/types/database';
 
 const SCOPE_LABEL: Record<string, string> = {
   FAMILY: 'Casal',
@@ -29,7 +30,18 @@ function shiftMonth(year: number, month: number, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default async function TransactionsPage({ searchParams }: { searchParams: { month?: string } }) {
+function monthHref(month: string, searchParams: { categoryId?: string; scope?: string }) {
+  const params = new URLSearchParams({ month });
+  if (searchParams.categoryId) params.set('categoryId', searchParams.categoryId);
+  if (searchParams.scope) params.set('scope', searchParams.scope);
+  return `/transactions?${params.toString()}`;
+}
+
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: { month?: string; categoryId?: string; scope?: string };
+}) {
   const user = await requireCurrentUser();
   const supabase = createClient();
 
@@ -37,6 +49,25 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   await supabase.rpc('generate_due_recurring_transactions', { p_household_id: user.householdId });
 
   const { year, month, start, end } = parseMonth(searchParams.month);
+
+  let transactionsQuery = supabase
+    .from('transactions')
+    .select(
+      'id, type, amount_cents, occurred_on, description, scope, category_id, installment_number, installment_total, import_batch_id',
+    )
+    .eq('household_id', user.householdId)
+    .gte('occurred_on', toDateInputValue(start))
+    .lt('occurred_on', toDateInputValue(end))
+    .is('deleted_at', null);
+
+  if (searchParams.categoryId === 'none') {
+    transactionsQuery = transactionsQuery.is('category_id', null);
+  } else if (searchParams.categoryId) {
+    transactionsQuery = transactionsQuery.eq('category_id', searchParams.categoryId);
+  }
+  if (searchParams.scope) {
+    transactionsQuery = transactionsQuery.eq('scope', searchParams.scope as ExpenseScope);
+  }
 
   const [categories, { data: accounts }, { data: cards }, { data: transactions }] = await Promise.all([
     getCategoryOptions(supabase),
@@ -54,16 +85,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       .eq('archived', false)
       .is('deleted_at', null)
       .order('name'),
-    supabase
-      .from('transactions')
-      .select(
-        'id, type, amount_cents, occurred_on, description, scope, category_id, installment_number, installment_total, import_batch_id',
-      )
-      .eq('household_id', user.householdId)
-      .gte('occurred_on', toDateInputValue(start))
-      .lt('occurred_on', toDateInputValue(end))
-      .is('deleted_at', null)
-      .order('occurred_on', { ascending: false }),
+    transactionsQuery.order('occurred_on', { ascending: false }),
   ]);
 
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
@@ -73,6 +95,14 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   const monthLabel = start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
+  const activeFilterLabel = searchParams.categoryId
+    ? searchParams.categoryId === 'none'
+      ? 'Sem categoria'
+      : (categories.find((c) => c.id === searchParams.categoryId)?.name ?? 'Categoria')
+    : searchParams.scope
+      ? SCOPE_LABEL[searchParams.scope]
+      : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -81,14 +111,25 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       </div>
 
       <div className="flex items-center justify-between">
-        <Link href={`/transactions?month=${shiftMonth(year, month, -1)}`} className="p-2 text-slate-400">
+        <Link href={monthHref(shiftMonth(year, month, -1), searchParams)} className="p-2 text-slate-400">
           ‹
         </Link>
         <p className="text-sm font-medium capitalize text-slate-900">{monthLabel}</p>
-        <Link href={`/transactions?month=${shiftMonth(year, month, 1)}`} className="p-2 text-slate-400">
+        <Link href={monthHref(shiftMonth(year, month, 1), searchParams)} className="p-2 text-slate-400">
           ›
         </Link>
       </div>
+
+      {activeFilterLabel && (
+        <div className="flex items-center justify-between rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">
+          <span>
+            Filtrando por: <strong className="font-medium text-slate-900">{activeFilterLabel}</strong>
+          </span>
+          <Link href={`/transactions?month=${year}-${String(month).padStart(2, '0')}`} className="font-medium text-brand-600">
+            Limpar
+          </Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Card className="text-center">

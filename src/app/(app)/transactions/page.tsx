@@ -56,7 +56,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       .order('name'),
     supabase
       .from('transactions')
-      .select('id, type, amount_cents, occurred_on, description, scope, category_id, installment_number, installment_total')
+      .select(
+        'id, type, amount_cents, occurred_on, description, scope, category_id, installment_number, installment_total, import_batch_id',
+      )
       .eq('household_id', user.householdId)
       .gte('occurred_on', toDateInputValue(start))
       .lt('occurred_on', toDateInputValue(end))
@@ -134,6 +136,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                     ({t.installment_number}/{t.installment_total})
                   </span>
                 ) : null}
+                {t.import_batch_id && (
+                  <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                    Importado
+                  </span>
+                )}
               </p>
               <p className="text-xs text-slate-500">
                 {formatDate(t.occurred_on)} · {SCOPE_LABEL[t.scope]} ·{' '}

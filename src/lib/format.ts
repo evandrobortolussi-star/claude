@@ -48,6 +48,20 @@ export function cardInvoiceMonth(occurredOnISO: string, closingDay: number): str
   return `${year}-${String(month).padStart(2, '0')}-01`;
 }
 
+/** Adds N days to a "YYYY-MM-DD" date. */
+export function addDaysISO(dateISO: string, days: number): string {
+  const [year, month, day] = dateISO.split('-').map(Number);
+  return toDateInputValue(new Date(year, month - 1, day + days));
+}
+
+/** Whole days between two "YYYY-MM-DD" dates (b - a). */
+export function daysBetweenISO(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  const msPerDay = 86400000;
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / msPerDay);
+}
+
 /** Adds N months to a "YYYY-MM-DD" date, clamping the day to the target
  * month's last day (e.g. Jan 31 + 1 month -> Feb 28/29). */
 export function addMonthsClamped(dateISO: string, months: number): string {

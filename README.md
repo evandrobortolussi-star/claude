@@ -8,6 +8,8 @@ Este repositório está sendo construído em etapas.
 - **Etapa 2** (concluída): núcleo financeiro — contas, cartões, investimentos,
   empréstimos/financiamentos, receitas e despesas (com parcelamento e
   recorrência), transferências e pagamento de fatura.
+- **Etapa 3** (concluída): importação de extratos (CSV/OFX), tela de revisão
+  e classificação com aprendizado de regras por estabelecimento.
 
 ## Stack
 
@@ -108,6 +110,38 @@ confirmação e faz um `UPDATE` marcando `deleted_at`, nunca um `DELETE` real.
 Um pagamento de empréstimo excluído reverte automaticamente o saldo devedor
 (mesmo trigger, tratando a transição de `deleted_at`).
 
+## Importação e classificação inteligente (Etapa 3)
+
+`supabase/migrations/0004_import_and_rules.sql` adiciona:
+
+- **`import_batches`** — um registro por arquivo importado (auditoria: de
+  onde veio cada movimentação).
+- **`import_staged_transactions`** — a fila de revisão. Uma linha importada
+  **nunca** vira `transactions` direto: ela fica em `PENDING`/`SUGGESTED`
+  até o usuário confirmar em `/import/review`, e só aí uma transação real é
+  criada. Ignorar mantém a linha (`status = 'IGNORED'`) em vez de apagá-la —
+  o histórico da importação nunca desaparece.
+- **`classification_rules`** — o "aprendizado": ao confirmar uma
+  classificação, o sistema grava (ou atualiza) uma regra ligando o padrão
+  normalizado da descrição à categoria e ao responsável escolhidos. Da
+  próxima vez que uma descrição parecida aparecer, ela chega já como
+  "Sugestão automática" — nunca como "Confirmada" direto, e o usuário
+  sempre pode aceitar, trocar ou ignorar. Editar/excluir uma regra só afeta
+  sugestões futuras; nada em `transactions` é reescrito.
+- **Parsers plugáveis** (`src/lib/import/{csv,ofx,index}.ts`): cada formato
+  implementa `StatementParser.canParse`/`parse`; adicionar um novo formato é
+  só empurrar mais um parser no array `PARSERS`, sem tocar no resto.
+- **Normalização** (`src/lib/normalize.ts`): remove acentos, dígitos,
+  pontuação e sufixos como LTDA/ME antes de comparar — assim
+  "SUPERMERCADO XYZ LTDA 04/09" e "Supermercado XYZ Ltda 05/10" batem com a
+  mesma regra.
+- **Duplicidade nunca decide sozinha**: cada linha importada é comparada
+  (mesma conta/cartão, valor igual, data a até 2 dias de distância, ou
+  `external_id` idêntico — o FITID do OFX) contra transações já existentes
+  e contra outras importações ainda não revisadas. Uma correspondência só
+  acende o aviso "Possível duplicata" na tela de revisão; nada é
+  descartado automaticamente.
+
 ### Sobre Open Finance (preparação)
 
 Nenhuma tabela de conexão bancária foi criada ainda. Quando a integração
@@ -121,7 +155,8 @@ nesta base de dados.
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
 2. Em **SQL Editor**, rode as migrations em ordem —
-   `0001_init.sql`, `0002_finance_core.sql`, `0003_seed_categories.sql`
+   `0001_init.sql`, `0002_finance_core.sql`, `0003_seed_categories.sql`,
+   `0004_import_and_rules.sql`
    (ou use a CLI do Supabase: `supabase db push`).
 3. Em **Authentication → Providers → Email**, decida se quer exigir
    confirmação de email (recomendado em produção; pode desativar em
@@ -152,8 +187,11 @@ nesta base de dados.
 - `/transactions` — receitas e despesas do mês, com categoria agrupada,
   responsável (Casal/Cônjuge 1/Cônjuge 2), parcelamento e recorrência;
   editar sempre permite corrigir a categoria.
-- `/dashboard`, `/import` — ainda "em breve": resumo visual e importação de
-  extrato ficam para as próximas etapas.
+- `/import` — upload de extrato CSV/OFX; `/import/review` — revisar e
+  confirmar cada movimentação importada (categoria → responsável →
+  confirmar), com aviso de possível duplicata; `/import/rules` — gerenciar
+  as regras de classificação aprendidas.
+- `/dashboard` — ainda "em breve": o resumo visual fica para uma próxima etapa.
 
 ## Scripts
 

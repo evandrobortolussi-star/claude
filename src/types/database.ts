@@ -5,6 +5,8 @@ export type TransactionType = 'INCOME' | 'EXPENSE';
 export type InvestmentType = 'RENDA_FIXA' | 'RENDA_VARIAVEL' | 'FUNDO' | 'PREVIDENCIA' | 'CRIPTO' | 'OUTRO';
 export type InvestmentMovementType = 'CONTRIBUTION' | 'REDEMPTION';
 export type LoanKind = 'LOAN' | 'FINANCING';
+export type StagedStatus = 'PENDING' | 'SUGGESTED' | 'CONFIRMED' | 'IGNORED';
+export type StatementFormat = 'CSV' | 'OFX';
 
 type Timestamps = {
   created_at: string;
@@ -369,6 +371,8 @@ export interface Database {
             installment_group_id: string | null;
             installment_number: number | null;
             installment_total: number | null;
+            import_batch_id: string | null;
+            external_id: string | null;
             created_by: string;
           };
         Insert: {
@@ -387,6 +391,8 @@ export interface Database {
           installment_group_id?: string | null;
           installment_number?: number | null;
           installment_total?: number | null;
+          import_batch_id?: string | null;
+          external_id?: string | null;
           created_by?: string;
           deleted_at?: string | null;
         };
@@ -466,6 +472,123 @@ export interface Database {
         };
         Relationships: [];
       };
+
+      classification_rules: {
+        Row: SoftDeletable &
+          Timestamps & {
+            id: string;
+            household_id: string;
+            pattern: string;
+            category_id: string;
+            scope: ExpenseScope;
+            match_count: number;
+            active: boolean;
+            created_by: string;
+          };
+        Insert: {
+          id?: string;
+          household_id: string;
+          pattern: string;
+          category_id: string;
+          scope?: ExpenseScope;
+          match_count?: number;
+          active?: boolean;
+          created_by?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          pattern?: string;
+          category_id?: string;
+          scope?: ExpenseScope;
+          match_count?: number;
+          active?: boolean;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+
+      import_batches: {
+        Row: {
+          id: string;
+          household_id: string;
+          source_format: StatementFormat;
+          file_name: string | null;
+          account_id: string | null;
+          card_id: string | null;
+          total_rows: number;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          source_format: StatementFormat;
+          file_name?: string | null;
+          account_id?: string | null;
+          card_id?: string | null;
+          total_rows?: number;
+          created_by?: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+
+      import_staged_transactions: {
+        Row: Timestamps & {
+          id: string;
+          household_id: string;
+          import_batch_id: string;
+          account_id: string | null;
+          card_id: string | null;
+          occurred_on: string;
+          description: string;
+          normalized_description: string;
+          amount_cents: number;
+          type: TransactionType;
+          external_id: string | null;
+          category_id: string | null;
+          scope: ExpenseScope;
+          status: StagedStatus;
+          suggested_category_id: string | null;
+          suggested_scope: ExpenseScope | null;
+          matched_rule_id: string | null;
+          possible_duplicate: boolean;
+          duplicate_of_transaction_id: string | null;
+          resulting_transaction_id: string | null;
+          created_by: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          import_batch_id: string;
+          account_id?: string | null;
+          card_id?: string | null;
+          occurred_on: string;
+          description: string;
+          normalized_description: string;
+          amount_cents: number;
+          type: TransactionType;
+          external_id?: string | null;
+          category_id?: string | null;
+          scope?: ExpenseScope;
+          status?: StagedStatus;
+          suggested_category_id?: string | null;
+          suggested_scope?: ExpenseScope | null;
+          matched_rule_id?: string | null;
+          possible_duplicate?: boolean;
+          duplicate_of_transaction_id?: string | null;
+          resulting_transaction_id?: string | null;
+          created_by?: string;
+        };
+        Update: {
+          category_id?: string | null;
+          scope?: ExpenseScope;
+          status?: StagedStatus;
+          resulting_transaction_id?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -481,6 +604,7 @@ export interface Database {
       investment_type: InvestmentType;
       investment_movement_type: InvestmentMovementType;
       loan_kind: LoanKind;
+      staged_status: StagedStatus;
     };
     CompositeTypes: Record<string, never>;
   };

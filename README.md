@@ -3,8 +3,11 @@
 Controle financeiro para o casal: receitas, despesas, cartões, contas,
 investimentos e empréstimos, num app mobile-first pensado para iPhone e web.
 
-Este repositório está sendo construído em etapas. **Etapa 1** (concluída):
-autenticação, estrutura de família (casal) e perfis.
+Este repositório está sendo construído em etapas.
+- **Etapa 1** (concluída): autenticação, estrutura de família (casal) e perfis.
+- **Etapa 2** (concluída): núcleo financeiro — contas, cartões, investimentos,
+  empréstimos/financiamentos, receitas e despesas (com parcelamento e
+  recorrência), transferências e pagamento de fatura.
 
 ## Stack
 
@@ -60,6 +63,51 @@ enviou.
   cookie) a cada requisição, o que valida o JWT contra o servidor do
   Supabase antes de liberar qualquer rota protegida.
 
+## Modelo de dados (Etapa 2)
+
+`supabase/migrations/0002_finance_core.sql` (schema) e `0003_seed_categories.sql`
+(categorias iniciais) criam o núcleo financeiro:
+
+- **Dinheiro sempre em `bigint` centavos** — nunca `numeric`/ponto flutuante.
+  A UI formata/parseia BRL (`src/lib/format.ts`), mas o banco só guarda
+  inteiros.
+- **`accounts`** (corrente/poupança/dinheiro), **`credit_cards`** (limite,
+  fechamento, vencimento), **`investments`** + **`investment_movements`**
+  (saldo é sempre a soma dos aportes/resgates, nunca um valor em cache) e
+  **`loans`** (empréstimo/financiamento) + **`loan_payments`** — cada
+  pagamento abate `outstanding_balance_cents` via trigger
+  (`apply_loan_payment`), e o `UPDATE` grant do cliente em `loans`
+  explicitamente **não inclui** essa coluna: só um pagamento pode mudar o
+  saldo devedor.
+- **`transactions`** (receita/despesa) com `category_id`, `account_id`
+  *ou* `card_id` (nunca os dois), `scope` (`FAMILY`/`SPOUSE_1`/`SPOUSE_2` —
+  Casal/Cônjuge 1/Cônjuge 2), e suporte a parcelamento
+  (`installment_group_id`/`installment_number`/`installment_total`, uma
+  linha por parcela, cada uma na sua data) e recorrência
+  (`recurring_transactions` como template; a RPC
+  `generate_due_recurring_transactions` materializa as ocorrências
+  pendentes de forma idempotente, chamada ao abrir a tela de lançamentos).
+- **`transfers`** e **`card_payments`** são tabelas **separadas** de
+  `transactions` — de propósito: uma transferência entre contas nunca é
+  receita/despesa, e pagar a fatura do cartão nunca duplica uma compra que
+  já virou despesa quando aconteceu.
+- **`category_groups`/`categories`**: catálogo global (não por família,
+  já que é apenas uma taxonomia compartilhada), somente leitura para
+  `authenticated` — exatamente os grupos/categorias do produto, sem inflar
+  a lista.
+- Um trigger (`validate_transaction_row` e equivalentes para
+  transferências/pagamentos/movimentos) confere no banco que
+  conta/cartão/categoria pertencem à mesma família **antes** de gravar —
+  nunca confiando que o cliente mandou um id correto.
+
+### Nada é excluído de verdade
+
+Toda tabela financeira tem `deleted_at`, e **não existe `GRANT DELETE`** para
+`authenticated` em nenhuma delas — o botão "Excluir" na UI sempre pede
+confirmação e faz um `UPDATE` marcando `deleted_at`, nunca um `DELETE` real.
+Um pagamento de empréstimo excluído reverte automaticamente o saldo devedor
+(mesmo trigger, tratando a transição de `deleted_at`).
+
 ### Sobre Open Finance (preparação)
 
 Nenhuma tabela de conexão bancária foi criada ainda. Quando a integração
@@ -72,7 +120,8 @@ nesta base de dados.
 ## Configurando o projeto
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
-2. Em **SQL Editor**, rode o conteúdo de `supabase/migrations/0001_init.sql`
+2. Em **SQL Editor**, rode as migrations em ordem —
+   `0001_init.sql`, `0002_finance_core.sql`, `0003_seed_categories.sql`
    (ou use a CLI do Supabase: `supabase db push`).
 3. Em **Authentication → Providers → Email**, decida se quer exigir
    confirmação de email (recomendado em produção; pode desativar em
@@ -87,17 +136,24 @@ nesta base de dados.
 6. `npm install`
 7. `npm run dev`
 
-## Estrutura do app (Etapa 1)
+## Estrutura do app
 
 - `/register` — criar uma família nova (você vira o "titular") ou entrar
   numa família existente com um código de convite.
 - `/login`, `/forgot-password`, `/reset-password` — autenticação e
   recuperação de senha via Supabase Auth.
 - `/profile` — editar seu nome/avatar, ver o código de convite da família,
-  ver o outro cônjuge, e (se você for o titular) renomear a família.
-- `/dashboard`, `/transactions`, `/import`, `/investments` — navegação
-  inferior já implementada (mobile-first, pensada para iPhone); o conteúdo
-  chega nas próximas etapas.
+  ver o outro cônjuge, renomear a família (titular), e links para gerenciar
+  contas/cartões/empréstimos/transferências.
+- `/accounts`, `/cards` (com detalhe de fatura em `/cards/[id]`),
+  `/investments` (com aportes/resgates em `/investments/[id]`), `/loans`
+  (com pagamentos em `/loans/[id]`), `/transfers` — cadastro do núcleo
+  financeiro (Etapa 2).
+- `/transactions` — receitas e despesas do mês, com categoria agrupada,
+  responsável (Casal/Cônjuge 1/Cônjuge 2), parcelamento e recorrência;
+  editar sempre permite corrigir a categoria.
+- `/dashboard`, `/import` — ainda "em breve": resumo visual e importação de
+  extrato ficam para as próximas etapas.
 
 ## Scripts
 

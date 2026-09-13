@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardTitle } from '@/components/ui/Card';
@@ -76,6 +77,14 @@ export default async function ProfilePage() {
         )}
       </Card>
 
+      <Card className="space-y-1">
+        <CardTitle className="mb-2">Gerenciar</CardTitle>
+        <SettingsLink href="/accounts" label="Contas e dinheiro" />
+        <SettingsLink href="/cards" label="Cartões de crédito" />
+        <SettingsLink href="/loans" label="Empréstimos e financiamentos" />
+        <SettingsLink href="/transfers" label="Transferências entre contas" />
+      </Card>
+
       <Card>
         <CardTitle className="mb-2">Segurança e privacidade</CardTitle>
         <ul className="list-disc space-y-1 pl-4 text-sm text-slate-600">
@@ -85,5 +94,14 @@ export default async function ProfilePage() {
         </ul>
       </Card>
     </div>
+  );
+}
+
+function SettingsLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="flex items-center justify-between py-2.5 text-sm text-slate-700">
+      {label}
+      <span className="text-slate-300">›</span>
+    </Link>
   );
 }

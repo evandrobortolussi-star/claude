@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { createLoan, archiveLoan } from './actions';
 
@@ -84,9 +84,7 @@ export default async function LoansPage() {
               <Input id="contractedOn" name="contractedOn" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
             </div>
           </div>
-          <Button type="submit" className="w-full">
-            Adicionar
-          </Button>
+          <SubmitButton className="w-full">Adicionar</SubmitButton>
         </form>
       </Card>
 

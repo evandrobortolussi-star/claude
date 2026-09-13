@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Label, Select } from '@/components/ui/Input';
 import { importStatement } from './actions';
 
@@ -80,9 +80,7 @@ export default async function ImportPage() {
               className="block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
             />
           </div>
-          <Button type="submit" className="w-full">
-            Importar
-          </Button>
+          <SubmitButton className="w-full">Importar</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-slate-400">
           Nada é lançado automaticamente: você revisa e confirma cada movimentação antes de virar um lançamento.

@@ -18,8 +18,8 @@ export const Button = forwardRef<
     <button
       ref={ref}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
-        'disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
+        'active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none',
         variantClasses[variant],
         className,
       )}

@@ -288,29 +288,75 @@ acoplar regras financeiras a componentes React específicos).
   i18n); vale reavaliar ao planejar produção.
 - `recharts` já é usado nos gráficos de `/dashboard` e `/relatorios`.
 
-## Validação (checklist da Etapa 5)
+## Validação
 
-Revisado nesta etapa antes de considerá-la concluída:
+### Os 16 pontos de teste
 
-- ✅ RLS habilitado e com política em **todas** as 17 tabelas de dados do
-  household + as 2 do catálogo global (conferido lendo as 5 migrations).
-- ✅ Nenhuma chave de serviço (`SUPABASE_SERVICE_ROLE_KEY`) é referenciada em
-  código de app (`src/`); nenhum campo de senha/credencial bancária existe
-  no schema.
-- ✅ Transferência e pagamento de fatura são tabelas próprias — nunca viram
-  linha em `transactions`.
-- ✅ Dinheiro em `bigint` centavos em todo o schema; parcelamento distribui
-  o total exato (resto vai para a última parcela).
-- 🔧 **Corrigida nesta etapa**: condição de corrida em
-  `generate_due_recurring_transactions` — duas chamadas concorrentes (ex.:
-  duas abas abertas) podiam gerar a mesma ocorrência recorrente duas vezes.
-  Corrigida travando a linha (`FOR UPDATE`) na origem, não com um workaround
-  no frontend (`0005_fix_recurring_race_condition.sql`).
-- ✅ Estados de carregamento e erro agora cobrem toda a área autenticada
-  (`(app)/loading.tsx`, `(app)/error.tsx`, com versões específicas em
-  `/dashboard`), além dos estados vazios que cada lista já tinha.
-- ⚠️ Ainda não validado com um banco Supabase real de ponta a ponta (este
-  ambiente não provisiona um projeto Supabase) — o `npm run build` valida
-  tipos e compilação, mas o comportamento do RLS/triggers em produção deve
-  ser testado manualmente com o casal real antes de ir ao ar, seguindo os
-  16 pontos desta checklist.
+| # | Ponto | Status | Onde/como |
+|---|---|---|---|
+| 1 | Usuário não acessa dados de outra família | ✅ | RLS com `is_household_member(household_id)` em toda tabela de dados (conferido lendo as 5 migrations) |
+| 2 | Casal compartilha movimentações corretamente | ✅ | Mesma `household_id` para os 2 `spouse_slot`; toda query é por família, não por usuário |
+| 3 | Gastos individuais aparecem por cônjuge e no consolidado | ✅ | Coluna `scope`; `summarizeByScope` soma por responsável, `summarizeTotals` soma tudo |
+| 4 | Transferência nunca é receita/despesa | ✅ | Tabela `transfers` própria, sem ligação com `transactions` |
+| 5 | Pagamento de fatura não duplica despesa | ✅ | Tabela `card_payments` própria; a compra já virou despesa quando aconteceu |
+| 6 | Importação não duplica transações | ✅ | `possible_duplicate` sinaliza (conta+valor+data±2 dias, ou FITID exato) — nunca bloqueia nem apaga sozinho, por decisão do produto |
+| 7 | Classificações aprendidas funcionam em novas importações | ✅ | `classification_rules` casadas por substring da descrição normalizada, testado no fluxo de `/import/review` |
+| 8 | Usuário corrige qualquer sugestão automática | ✅ | Categoria/responsável em `StagedRow` sempre editáveis antes de confirmar; regras editáveis em `/import/rules` |
+| 9 | Dashboard calcula receita/despesa/saldo corretamente | ✅ | `summarizeTotals` — soma direta por tipo, sem lógica condicional escondida |
+| 10 | Parcelamentos distribuídos corretamente | ✅ | `base = total/n` com resto na última parcela — soma sempre bate com o total |
+| 11 | Precisão monetária | ✅ | `bigint` centavos em 100% do schema, nunca `numeric`/float |
+| 12 | Nenhum segredo no frontend | ✅ | Só a chave `anon` (pública por design) chega ao cliente; `SERVICE_ROLE_KEY` não é referenciada em `src/` |
+| 13 | Nenhuma credencial bancária armazenada | ✅ | Nenhum campo de senha/token de banco existe no schema |
+| 14 | RLS impede acesso indevido | ✅ | Mesmo ponto 1 — sem `GRANT` para `anon`, sem policy permissiva |
+| 15 | Funciona em diferentes tamanhos de tela | ✅ | Mobile-first fluido (sem larguras fixas), `max-w` progressivo em `md`/`lg` |
+| 16 | Estados de loading/erro/vazio/sucesso | ✅ | `(app)/loading.tsx` + `(app)/error.tsx` cobrindo toda a área autenticada; toda lista tem mensagem de vazio; toda ação de escrita redireciona ou mostra confirmação |
+
+**Corrigida ao longo da validação**: condição de corrida em
+`generate_due_recurring_transactions` — duas chamadas concorrentes (ex.:
+duas abas abertas) podiam gerar a mesma ocorrência recorrente duas vezes.
+Corrigida travando a linha (`FOR UPDATE`) na origem, não com um workaround
+no frontend (`0005_fix_recurring_race_condition.sql`).
+
+⚠️ **Limite honesto**: nada disso foi validado com um banco Supabase real de
+ponta a ponta — este ambiente não provisiona um projeto Supabase. `npm run
+build` valida tipos e compilação; o comportamento do RLS/triggers em
+produção precisa ser testado manualmente com o casal real (crie duas
+famílias de teste e confirme que uma nunca vê dados da outra) antes de ir
+ao ar.
+
+### iPhone e responsividade
+
+- **Tap targets de 44pt**: `Button`, `Input`, `Select` e `Textarea` têm
+  `min-h-11` (44px) — o mínimo recomendado pela Apple.
+- **Sem zoom indesejado**: campos de formulário usam `text-base` (16px) —
+  abaixo disso o Safari no iOS dá zoom automático na página ao focar um
+  campo, um bug de UX clássico que evitamos de propósito.
+- **Feedback visual imediato**: todo botão principal de formulário usa
+  `SubmitButton` (`useFormStatus`), trocando o texto para "Salvando…" e
+  desabilitando assim que o toque acontece — nunca fica parado sem reação
+  até a navegação terminar. Toque em qualquer botão também dá um leve
+  encolhimento (`active:scale-98`) como resposta tátil instantânea.
+- **Safe areas**: `viewportFit: 'cover'` + classes `.safe-top`/`.safe-bottom`
+  no topo/rodapé, para não colidir com notch/home indicator.
+- **Navegação de uma mão**: 5 abas fixas no rodapé (fácil alcance do
+  polegar), sem menus escondidos em gestos exóticos.
+
+### Critério de sucesso do MVP
+
+| # | O casal consegue... | Onde |
+|---|---|---|
+| 1 | Criar a família e acessar com segurança | `/register`, `/login`, RLS ponta a ponta |
+| 2 | Cadastrar bancos, cartões, investimentos e empréstimos | `/contas` → `/accounts`, `/cards`, `/investments`, `/loans` |
+| 3 | Registrar receitas e despesas | `/movimentacoes` → `/transactions` |
+| 4 | Identificar cada gasto como casal ou individual | campo `scope` em todo lançamento |
+| 5 | Importar um extrato bancário | `/configuracoes` → `/import` (CSV/OFX) |
+| 6 | Revisar e classificar rapidamente | `/import/review` (categoria → responsável → confirmar) |
+| 7 | Fazer o sistema aprender classificações | `classification_rules`, gerido em `/import/rules` |
+| 8 | Visualizar quanto gastou no mês | `/dashboard` (Início) |
+| 9 | Entender quais setores consumiram mais | `/relatorios/categorias` |
+| 10 | Consultar a evolução dos gastos | `/relatorios/evolucao` |
+| 11 | Usar confortavelmente no iPhone | mobile-first, 44pt de tap target, sem zoom no Safari (ver acima) |
+| 12 | Ter arquitetura segura e pronta para Open Finance | RLS em tudo, sem credencial bancária, tabela de conexões desenhada mas não construída (ver seção acima) |
+
+Todos os 12 critérios têm uma tela/rota concreta hoje; nenhum depende de
+funcionalidade futura.

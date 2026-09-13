@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { createInvestment, archiveInvestment } from './actions';
 import { INVESTMENT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
@@ -69,9 +69,7 @@ export default async function InvestmentsPage() {
               <Input id="institution" name="institution" placeholder="Ex: XP" />
             </div>
           </div>
-          <Button type="submit" className="w-full">
-            Adicionar investimento
-          </Button>
+          <SubmitButton className="w-full">Adicionar investimento</SubmitButton>
         </form>
       </Card>
 

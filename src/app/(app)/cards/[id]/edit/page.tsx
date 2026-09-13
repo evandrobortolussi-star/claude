@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label } from '@/components/ui/Input';
 import { updateCard } from '../../actions';
 
@@ -54,9 +54,7 @@ export default async function EditCardPage({ params }: { params: { id: string } 
               inputMode="decimal"
             />
           </div>
-          <Button type="submit" className="w-full">
-            Salvar alterações
-          </Button>
+          <SubmitButton className="w-full">Salvar alterações</SubmitButton>
         </form>
       </Card>
     </div>

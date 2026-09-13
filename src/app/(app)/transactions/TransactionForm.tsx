@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label, Select, Textarea } from '@/components/ui/Input';
 import { cn } from '@/lib/cn';
 import type { CategoryOption } from '@/lib/categories';
@@ -199,9 +199,7 @@ export function TransactionForm({
         <Textarea id="notes" name="notes" rows={2} defaultValue={defaultValues?.notes ?? ''} />
       </div>
 
-      <Button type="submit" className="w-full">
-        {submitLabel}
-      </Button>
+      <SubmitButton className="w-full">{submitLabel}</SubmitButton>
     </form>
   );
 }

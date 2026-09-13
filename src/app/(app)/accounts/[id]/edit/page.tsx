@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { updateAccount } from '../../actions';
 import { ACCOUNT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
@@ -57,9 +57,7 @@ export default async function EditAccountPage({ params }: { params: { id: string
             <Label htmlFor="institution">Instituição</Label>
             <Input id="institution" name="institution" defaultValue={account.institution ?? ''} />
           </div>
-          <Button type="submit" className="w-full">
-            Salvar alterações
-          </Button>
+          <SubmitButton className="w-full">Salvar alterações</SubmitButton>
         </form>
       </Card>
     </div>

@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label } from '@/components/ui/Input';
 import { createCard, archiveCard } from './actions';
 
@@ -50,9 +50,7 @@ export default async function CardsPage() {
             <Label htmlFor="limit">Limite (opcional)</Label>
             <Input id="limit" name="limit" placeholder="0,00" inputMode="decimal" />
           </div>
-          <Button type="submit" className="w-full">
-            Adicionar cartão
-          </Button>
+          <SubmitButton className="w-full">Adicionar cartão</SubmitButton>
         </form>
       </Card>
 

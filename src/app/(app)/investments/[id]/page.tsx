@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { createInvestmentMovement, deleteInvestmentMovement } from '../actions';
@@ -87,9 +87,7 @@ export default async function InvestmentDetailPage({ params }: { params: { id: s
             <Label htmlFor="notes">Notas (opcional)</Label>
             <Input id="notes" name="notes" />
           </div>
-          <Button type="submit" className="w-full">
-            Registrar
-          </Button>
+          <SubmitButton className="w-full">Registrar</SubmitButton>
         </form>
       </Card>
 

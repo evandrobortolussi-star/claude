@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getCategoryOptions } from '@/lib/categories';
 import { Card } from '@/components/ui/Card';
 import { Input, Label, Select } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { updateRule, deactivateRule } from './actions';
 import { SCOPE_LABEL } from '@/lib/labels';
@@ -73,9 +73,7 @@ export default async function ClassificationRulesPage() {
                 </div>
                 <p className="text-xs text-slate-400">Usada {rule.match_count} vez(es) em sugestões.</p>
                 <div className="flex items-center gap-3 pt-1">
-                  <Button type="submit" variant="secondary" className="flex-1">
-                    Salvar
-                  </Button>
+                  <SubmitButton variant="secondary" className="flex-1">Salvar</SubmitButton>
                 </div>
               </form>
               <form action={deactivateRule.bind(null, rule.id)} className="mt-2 text-center">

@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { createAccount, archiveAccount } from './actions';
 import { ACCOUNT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
@@ -53,9 +53,7 @@ export default async function AccountsPage() {
             <Label htmlFor="institution">Instituição (opcional)</Label>
             <Input id="institution" name="institution" placeholder="Ex: Itaú" />
           </div>
-          <Button type="submit" className="w-full">
-            Adicionar conta
-          </Button>
+          <SubmitButton className="w-full">Adicionar conta</SubmitButton>
         </form>
       </Card>
 

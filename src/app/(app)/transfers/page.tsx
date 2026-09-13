@@ -2,7 +2,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { createTransfer, deleteTransfer } from './actions';
@@ -83,9 +83,7 @@ export default async function TransfersPage() {
             <Label htmlFor="notes">Notas (opcional)</Label>
             <Input id="notes" name="notes" />
           </div>
-          <Button type="submit" className="w-full">
-            Transferir
-          </Button>
+          <SubmitButton className="w-full">Transferir</SubmitButton>
         </form>
       </Card>
 

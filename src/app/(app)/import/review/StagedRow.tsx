@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Select, Label } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
+import { SubmitButton } from '@/components/ui/SubmitButton';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { cn } from '@/lib/cn';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
@@ -119,9 +119,7 @@ export function StagedRow({
           </Select>
         </div>
         <div className="flex items-center gap-2 pt-1">
-          <Button type="submit" className="flex-1" disabled={!categoryId}>
-            Confirmar
-          </Button>
+          <SubmitButton className="flex-1" disabled={!categoryId}>Confirmar</SubmitButton>
         </div>
       </form>
       <form action={ignoreAction} className="mt-1 text-center">

@@ -6,15 +6,7 @@ import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { createInvestment, archiveInvestment } from './actions';
-
-const TYPE_LABEL: Record<string, string> = {
-  RENDA_FIXA: 'Renda fixa',
-  RENDA_VARIAVEL: 'Renda variável',
-  FUNDO: 'Fundo',
-  PREVIDENCIA: 'Previdência',
-  CRIPTO: 'Cripto',
-  OUTRO: 'Outro',
-};
+import { INVESTMENT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
 
 export default async function InvestmentsPage() {
   const user = await requireCurrentUser();

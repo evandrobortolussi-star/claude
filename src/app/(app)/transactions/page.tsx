@@ -7,40 +7,22 @@ import { Card } from '@/components/ui/Card';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { createTransaction, deleteTransaction } from './actions';
 import { TransactionForm } from './TransactionForm';
-import type { ExpenseScope } from '@/types/database';
+import type { ExpenseScope, TransactionType } from '@/types/database';
+import { SCOPE_LABEL, TRANSACTION_TYPE_LABEL } from '@/lib/labels';
+import { parseMonthParam, shiftMonthParam } from '@/lib/month';
 
-const SCOPE_LABEL: Record<string, string> = {
-  FAMILY: 'Casal',
-  SPOUSE_1: 'Cônjuge 1',
-  SPOUSE_2: 'Cônjuge 2',
-};
-
-function parseMonth(month?: string) {
-  const now = new Date();
-  const [year, m] = (month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
-    .split('-')
-    .map(Number);
-  const start = new Date(year, m - 1, 1);
-  const end = new Date(year, m, 1);
-  return { year, month: m, start, end };
-}
-
-function shiftMonth(year: number, month: number, delta: number) {
-  const d = new Date(year, month - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthHref(month: string, searchParams: { categoryId?: string; scope?: string }) {
+function monthHref(month: string, searchParams: { categoryId?: string; scope?: string; type?: string }) {
   const params = new URLSearchParams({ month });
   if (searchParams.categoryId) params.set('categoryId', searchParams.categoryId);
   if (searchParams.scope) params.set('scope', searchParams.scope);
+  if (searchParams.type) params.set('type', searchParams.type);
   return `/transactions?${params.toString()}`;
 }
 
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: { month?: string; categoryId?: string; scope?: string };
+  searchParams: { month?: string; categoryId?: string; scope?: string; type?: string };
 }) {
   const user = await requireCurrentUser();
   const supabase = createClient();
@@ -48,7 +30,7 @@ export default async function TransactionsPage({
   // Materialize any recurring occurrences due up to today before listing.
   await supabase.rpc('generate_due_recurring_transactions', { p_household_id: user.householdId });
 
-  const { year, month, start, end } = parseMonth(searchParams.month);
+  const { year, month, start, end } = parseMonthParam(searchParams.month);
 
   let transactionsQuery = supabase
     .from('transactions')
@@ -67,6 +49,9 @@ export default async function TransactionsPage({
   }
   if (searchParams.scope) {
     transactionsQuery = transactionsQuery.eq('scope', searchParams.scope as ExpenseScope);
+  }
+  if (searchParams.type) {
+    transactionsQuery = transactionsQuery.eq('type', searchParams.type as TransactionType);
   }
 
   const [categories, { data: accounts }, { data: cards }, { data: transactions }] = await Promise.all([
@@ -100,8 +85,10 @@ export default async function TransactionsPage({
       ? 'Sem categoria'
       : (categories.find((c) => c.id === searchParams.categoryId)?.name ?? 'Categoria')
     : searchParams.scope
-      ? SCOPE_LABEL[searchParams.scope]
-      : null;
+      ? SCOPE_LABEL[searchParams.scope as ExpenseScope]
+      : searchParams.type
+        ? TRANSACTION_TYPE_LABEL[searchParams.type as TransactionType]
+        : null;
 
   return (
     <div className="space-y-6">
@@ -111,11 +98,11 @@ export default async function TransactionsPage({
       </div>
 
       <div className="flex items-center justify-between">
-        <Link href={monthHref(shiftMonth(year, month, -1), searchParams)} className="p-2 text-slate-400">
+        <Link href={monthHref(shiftMonthParam(year, month, -1), searchParams)} className="p-2 text-slate-400">
           ‹
         </Link>
         <p className="text-sm font-medium capitalize text-slate-900">{monthLabel}</p>
-        <Link href={monthHref(shiftMonth(year, month, 1), searchParams)} className="p-2 text-slate-400">
+        <Link href={monthHref(shiftMonthParam(year, month, 1), searchParams)} className="p-2 text-slate-400">
           ›
         </Link>
       </div>

@@ -5,15 +5,10 @@ import { Button } from '@/components/ui/Button';
 import { Input, Label, Select, Textarea } from '@/components/ui/Input';
 import { cn } from '@/lib/cn';
 import type { CategoryOption } from '@/lib/categories';
+import { SCOPE_LABEL } from '@/lib/labels';
 
 type Account = { id: string; name: string };
 type CreditCard = { id: string; name: string };
-
-const SCOPE_LABEL: Record<string, string> = {
-  FAMILY: 'Casal',
-  SPOUSE_1: 'Cônjuge 1',
-  SPOUSE_2: 'Cônjuge 2',
-};
 
 export function TransactionForm({
   action,

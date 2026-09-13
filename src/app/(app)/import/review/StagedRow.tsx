@@ -8,13 +8,8 @@ import { cn } from '@/lib/cn';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import type { CategoryOption } from '@/lib/categories';
 import type { StagedStatus } from '@/types/database';
+import { SCOPE_LABEL } from '@/lib/labels';
 import { confirmStagedTransaction, ignoreStagedTransaction } from './actions';
-
-const SCOPE_LABEL: Record<string, string> = {
-  FAMILY: 'Casal',
-  SPOUSE_1: 'Cônjuge 1',
-  SPOUSE_2: 'Cônjuge 2',
-};
 
 export function StagedRow({
   staged,

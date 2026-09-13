@@ -142,6 +142,49 @@ export async function getMonthlyTrend(
   return Array.from(buckets.values());
 }
 
+export type MonthlyScopePoint = { label: string; FAMILY: number; SPOUSE_1: number; SPOUSE_2: number };
+
+export async function getMonthlyTrendByScope(
+  supabase: SupabaseClient<Database>,
+  householdId: string,
+  referenceDate: Date,
+  monthsBack: number,
+): Promise<MonthlyScopePoint[]> {
+  const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - (monthsBack - 1), 1);
+  const end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 1);
+
+  const { data } = await supabase
+    .from('transactions')
+    .select('amount_cents, occurred_on, scope')
+    .eq('household_id', householdId)
+    .eq('type', 'EXPENSE')
+    .gte('occurred_on', toDateInputValue(start))
+    .lt('occurred_on', toDateInputValue(end))
+    .is('deleted_at', null);
+
+  const buckets = new Map<string, MonthlyScopePoint>();
+  for (let i = 0; i < monthsBack; i++) {
+    const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - (monthsBack - 1 - i), 1);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    buckets.set(key, {
+      label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+      FAMILY: 0,
+      SPOUSE_1: 0,
+      SPOUSE_2: 0,
+    });
+  }
+
+  for (const t of data ?? []) {
+    const [y, m] = t.occurred_on.split('-').map(Number);
+    const key = `${y}-${m - 1}`;
+    const bucket = buckets.get(key);
+    if (!bucket) continue;
+    bucket[t.scope] += t.amount_cents;
+  }
+
+  return Array.from(buckets.values());
+}
+
 export type DueSoonItem = { id: string; label: string; dueDate: string; amountCents: number | null; kind: 'card' | 'loan' };
 
 function clampedDate(year: number, monthIndex: number, day: number): Date {

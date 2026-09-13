@@ -6,12 +6,7 @@ import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, Select } from '@/components/ui/Input';
 import { updateAccount } from '../../actions';
-
-const TYPE_LABEL: Record<string, string> = {
-  CHECKING: 'Conta corrente',
-  SAVINGS: 'Poupança',
-  CASH: 'Dinheiro',
-};
+import { ACCOUNT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
 
 export default async function EditAccountPage({ params }: { params: { id: string } }) {
   const user = await requireCurrentUser();

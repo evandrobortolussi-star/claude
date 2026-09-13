@@ -3,12 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Select } from '@/components/ui/Input';
 import { cn } from '@/lib/cn';
-
-const SCOPE_LABEL: Record<string, string> = {
-  FAMILY: 'Casal',
-  SPOUSE_1: 'Cônjuge 1',
-  SPOUSE_2: 'Cônjuge 2',
-};
+import { SCOPE_LABEL } from '@/lib/labels';
 
 export function DashboardFilters({
   accounts,

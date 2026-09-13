@@ -6,12 +6,7 @@ import { Input, Label, Select } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { updateRule, deactivateRule } from './actions';
-
-const SCOPE_LABEL: Record<string, string> = {
-  FAMILY: 'Casal',
-  SPOUSE_1: 'Cônjuge 1',
-  SPOUSE_2: 'Cônjuge 2',
-};
+import { SCOPE_LABEL } from '@/lib/labels';
 
 export default async function ClassificationRulesPage() {
   const user = await requireCurrentUser();

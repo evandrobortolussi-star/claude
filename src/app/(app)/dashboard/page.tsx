@@ -3,41 +3,19 @@ import { requireCurrentUser } from '@/lib/session';
 import { createClient } from '@/lib/supabase/server';
 import { getCategoryOptions } from '@/lib/categories';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
+import { parseMonthParam, shiftMonthParam } from '@/lib/month';
 import {
   getMonthTransactions,
-  getMonthlyTrend,
   getUpcomingDueDates,
   summarizeTotals,
   summarizeByScope,
-  summarizeByCategory,
-  topExpenses,
   countUncategorizedExpenses,
   type DashboardFilters as Filters,
 } from '@/lib/dashboard';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { CategoryDonutChart, categoryPalette } from '@/components/charts/CategoryDonutChart';
-import { MonthlyEvolutionChart } from '@/components/charts/MonthlyEvolutionChart';
 import { DashboardFilters } from './DashboardFilters';
 import type { ExpenseScope } from '@/types/database';
-
-const SCOPE_LABEL: Record<ExpenseScope, string> = {
-  FAMILY: 'Casal',
-  SPOUSE_1: 'Cônjuge 1',
-  SPOUSE_2: 'Cônjuge 2',
-};
-
-function parseMonth(month?: string) {
-  const now = new Date();
-  const [year, m] = (month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
-    .split('-')
-    .map(Number);
-  return { year, month: m, start: new Date(year, m - 1, 1), end: new Date(year, m, 1) };
-}
-
-function shiftMonth(year: number, month: number, delta: number) {
-  const d = new Date(year, month - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+import { SCOPE_LABEL } from '@/lib/labels';
 
 function withMonth(month: string, extra: Record<string, string | undefined>) {
   const params = new URLSearchParams({ month });
@@ -61,7 +39,7 @@ export default async function DashboardPage({
   const user = await requireCurrentUser();
   const supabase = createClient();
 
-  const { year, month, start, end } = parseMonth(searchParams.month);
+  const { year, month, start, end } = parseMonthParam(searchParams.month);
   const monthKey = `${year}-${String(month).padStart(2, '0')}`;
 
   const filters: Filters = {
@@ -71,7 +49,7 @@ export default async function DashboardPage({
     categoryId: searchParams.categoryId || undefined,
   };
 
-  const [categories, { data: accounts }, { data: cards }, transactions, trend, dueSoon] = await Promise.all([
+  const [categories, { data: accounts }, { data: cards }, transactions, dueSoon] = await Promise.all([
     getCategoryOptions(supabase),
     supabase
       .from('accounts')
@@ -88,32 +66,27 @@ export default async function DashboardPage({
       .is('deleted_at', null)
       .order('name'),
     getMonthTransactions(supabase, user.householdId, start, end, filters),
-    getMonthlyTrend(supabase, user.householdId, start, 6, filters),
     getUpcomingDueDates(supabase, user.householdId),
   ]);
 
-  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
   const { income, expense, balance } = summarizeTotals(transactions);
   const byScope = summarizeByScope(transactions);
-  const byCategory = summarizeByCategory(transactions, categoryNameById);
-  const ranking = topExpenses(transactions, 5);
   const uncategorizedCount = countUncategorizedExpenses(transactions);
   const monthLabel = start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-  const hasAnyMovement = transactions.length > 0;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Visão financeira</h1>
-        <p className="text-sm text-slate-500">Como o dinheiro do casal se moveu neste mês.</p>
+        <h1 className="text-lg font-semibold text-slate-900">Início</h1>
+        <p className="text-sm text-slate-500">Sua situação financeira em poucos segundos.</p>
       </div>
 
       <div className="flex items-center justify-between">
-        <Link href={dashboardHref(searchParams, { month: shiftMonth(year, month, -1) })} className="p-2 text-slate-400">
+        <Link href={dashboardHref(searchParams, { month: shiftMonthParam(year, month, -1) })} className="p-2 text-slate-400">
           ‹
         </Link>
         <p className="text-sm font-medium capitalize text-slate-900">{monthLabel}</p>
-        <Link href={dashboardHref(searchParams, { month: shiftMonth(year, month, 1) })} className="p-2 text-slate-400">
+        <Link href={dashboardHref(searchParams, { month: shiftMonthParam(year, month, 1) })} className="p-2 text-slate-400">
           ›
         </Link>
       </div>
@@ -183,63 +156,12 @@ export default async function DashboardPage({
         </div>
       </Card>
 
-      {!hasAnyMovement ? (
-        <Card className="py-10 text-center">
-          <p className="text-sm text-slate-400">Nenhuma movimentação neste mês com os filtros atuais.</p>
-        </Card>
-      ) : (
-        <>
-          <Card>
-            <CardTitle>Despesas por categoria</CardTitle>
-            <CategoryDonutChart data={byCategory.map((c) => ({ name: c.name, totalCents: c.totalCents }))} />
-          </Card>
-
-          <Card>
-            <CardTitle className="mb-2">Onde gastamos nosso dinheiro?</CardTitle>
-            <ul className="space-y-2">
-              {byCategory.slice(0, 8).map((c, i) => (
-                <li key={c.categoryId ?? '__none__'}>
-                  <Link
-                    href={withMonth(monthKey, { categoryId: c.categoryId ?? 'none' })}
-                    className="flex items-center justify-between rounded-lg px-1 py-1 text-sm hover:bg-slate-50"
-                  >
-                    <span className="flex items-center gap-2 text-slate-700">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: categoryPalette[i % categoryPalette.length] }}
-                      />
-                      {c.name}
-                    </span>
-                    <span className="font-medium text-slate-900">{formatCentsToBRL(c.totalCents)}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card>
-            <CardTitle className="mb-2">Maiores despesas do mês</CardTitle>
-            <ul className="space-y-2">
-              {ranking.map((t) => (
-                <li key={t.id}>
-                  <Link
-                    href={`/transactions/${t.id}/edit`}
-                    className="flex items-center justify-between rounded-lg px-1 py-1 text-sm hover:bg-slate-50"
-                  >
-                    <span className="min-w-0 truncate text-slate-700">{t.description}</span>
-                    <span className="ml-2 shrink-0 font-medium text-expense">{formatCentsToBRL(t.amount_cents)}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </>
-      )}
-
-      <Card>
-        <CardTitle>Evolução (6 meses)</CardTitle>
-        <MonthlyEvolutionChart data={trend} />
-      </Card>
+      <Link
+        href="/relatorios"
+        className="block rounded-2xl border border-slate-200 bg-white p-4 text-center text-sm font-medium text-slate-600 shadow-card"
+      >
+        Ver relatórios completos →
+      </Link>
 
       <Link
         href="/transactions"

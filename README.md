@@ -13,6 +13,10 @@ Este repositório está sendo construído em etapas.
 - **Etapa 4** (concluída): dashboard mensal — resumo, gastos por
   responsável/categoria, evolução, ranking de maiores despesas, filtros e
   indicadores de vencimento/sem-categoria.
+- **Etapa 5** (concluída): navegação principal em 5 seções (Início,
+  Movimentações, Contas, Relatórios, Configurações), separação mais clara
+  entre UI/regras de negócio/acesso a dados, e auditoria de segurança —
+  Open Finance continua adiado por decisão do produto (ver abaixo).
 
 ## Stack
 
@@ -147,19 +151,83 @@ Um pagamento de empréstimo excluído reverte automaticamente o saldo devedor
 
 ### Sobre Open Finance (preparação)
 
-Nenhuma tabela de conexão bancária foi criada ainda. Quando a integração
+Nenhuma tabela de conexão bancária foi criada ainda — por decisão do
+produto, adiada para depois de validar bem a base manual/importação com o
+casal de verdade (ver `/configuracoes/bancos` no app). Quando a integração
 Open Finance chegar, o desenho será: uma tabela `open_finance_connections`
 guardando **apenas metadados** (provedor, id da instituição, status) — o
 token de acesso emitido pelo agregador (ex. Pluggy/Belvo) deve ficar em um
 cofre de segredos dedicado (ou no próprio provedor), nunca em texto puro
 nesta base de dados.
 
+## Arquitetura modular (Etapa 5)
+
+O código já nasceu separado por responsabilidade; esta etapa reforçou e
+documentou essa separação:
+
+- **UI** (`src/app/**/page.tsx`, `src/components/`) — só apresentação e
+  formulários. Nenhuma página monta uma query SQL "de negócio" complexa
+  sozinha: ela chama funções de `src/lib/`.
+- **Regras de negócio e agregações** (`src/lib/dashboard.ts`,
+  `src/lib/import/matching.ts`) — cálculos puros (totais, distribuição por
+  categoria/responsável, sugestão de regra, detecção de duplicidade) que
+  recebem dados já buscados e não sabem nada de React ou Supabase além do
+  tipo do cliente. Testáveis isoladamente da UI.
+- **Acesso a dados** — Server Actions (`actions.ts` em cada rota) e
+  `src/lib/supabase/{client,server}.ts`. Sempre o cliente com a chave anon +
+  sessão do usuário — nunca a service role — para que a autorização real
+  aconteça no Postgres (RLS), não no código do servidor Next.js.
+- **Processamento de importação** (`src/lib/import/{csv,ofx,index}.ts`) —
+  isolado da tela: cada formato é um `StatementParser` independente,
+  testável sem subir a UI.
+- **Classificação automática** (`src/lib/normalize.ts` +
+  `src/lib/import/matching.ts` + tabela `classification_rules`) — a lógica
+  de "qual regra combina com esta descrição" vive nesses dois arquivos,
+  reutilizável tanto no momento da importação quanto numa futura tela de
+  reclassificação em lote.
+- **Autenticação/autorização** (`src/lib/session.ts`, `src/middleware.ts`,
+  `supabase/migrations/*.sql`) — a fonte da verdade de "quem pode ver o
+  quê" é sempre o banco (RLS); o código do app só lê a sessão, nunca decide
+  sozinho uma permissão.
+- **Vocabulário compartilhado** (`src/lib/labels.ts`) — nomes exibidos
+  (Casal/Cônjuge 1/Cônjuge 2, tipos de conta, etc.) vivem num só lugar em
+  vez de copiados por componente.
+
+### Navegação (Etapa 5)
+
+Cinco seções fixas na navegação inferior, cada uma com uma página "hub"
+listando seus subitens (padrão comum em apps mobile quando uma aba tem
+mais de um destino):
+
+| Seção | Rota | Subitens |
+|---|---|---|
+| Início | `/dashboard` | resumo rápido do mês |
+| Movimentações | `/movimentacoes` | Todas, Pendentes de classificação, Receitas, Despesas |
+| Contas | `/contas` | Bancos, Cartões, Investimentos, Empréstimos, Transferências |
+| Relatórios | `/relatorios` | Evolução mensal, Categorias, Casal x individuais |
+| Configurações | `/configuracoes` | Perfil, Casal, Categorias, Regras automáticas, Importações, Bancos conectados, Segurança |
+
+As rotas de CRUD já existentes (`/accounts`, `/transactions`, `/profile`
+etc.) não mudaram de endereço — os hubs só organizam o caminho até elas.
+O componente `BottomNav` decide qual aba fica destacada pelo prefixo de
+rota mais específico que casa com a URL atual (ex.: `/import/review`
+pertence a Movimentações, mas `/import` e `/import/rules` pertencem a
+Configurações, mesmo compartilhando o prefixo `/import`).
+
+### Preparação para iOS nativo
+
+A UI é HTML/CSS/JS padrão (sem APIs exclusivas de navegador incomuns),
+então uma futura versão iOS via Capacitor ou WebView é viável sem reescrever
+a lógica de negócio — ela já está isolada em `src/lib/`. Isso não foi
+implementado nesta etapa; é só uma restrição que guiou as decisões (evitar
+acoplar regras financeiras a componentes React específicos).
+
 ## Configurando o projeto
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
 2. Em **SQL Editor**, rode as migrations em ordem —
    `0001_init.sql`, `0002_finance_core.sql`, `0003_seed_categories.sql`,
-   `0004_import_and_rules.sql`
+   `0004_import_and_rules.sql`, `0005_fix_recurring_race_condition.sql`
    (ou use a CLI do Supabase: `supabase db push`).
 3. Em **Authentication → Providers → Email**, decida se quer exigir
    confirmação de email (recomendado em produção; pode desativar em
@@ -180,26 +248,29 @@ nesta base de dados.
   numa família existente com um código de convite.
 - `/login`, `/forgot-password`, `/reset-password` — autenticação e
   recuperação de senha via Supabase Auth.
-- `/profile` — editar seu nome/avatar, ver o código de convite da família,
-  ver o outro cônjuge, renomear a família (titular), e links para gerenciar
-  contas/cartões/empréstimos/transferências.
-- `/accounts`, `/cards` (com detalhe de fatura em `/cards/[id]`),
-  `/investments` (com aportes/resgates em `/investments/[id]`), `/loans`
-  (com pagamentos em `/loans/[id]`), `/transfers` — cadastro do núcleo
-  financeiro (Etapa 2).
-- `/transactions` — receitas e despesas do mês, com categoria agrupada,
-  responsável (Casal/Cônjuge 1/Cônjuge 2), parcelamento e recorrência;
-  editar sempre permite corrigir a categoria.
-- `/import` — upload de extrato CSV/OFX; `/import/review` — revisar e
-  confirmar cada movimentação importada (categoria → responsável →
-  confirmar), com aviso de possível duplicata; `/import/rules` — gerenciar
-  as regras de classificação aprendidas.
-- `/dashboard` — visão mensal: recebido/gasto/saldo, gastos por
-  Casal/Cônjuge 1/Cônjuge 2 (toque para filtrar), despesas por categoria
-  (gráfico + lista "Onde gastamos nosso dinheiro?", toque numa categoria
-  abre os lançamentos), evolução dos últimos 6 meses, ranking das maiores
-  despesas, aviso de faturas/parcelas vencendo em até 7 dias, aviso de
-  despesas sem categoria, e filtros por responsável/conta/cartão/categoria.
+- `/dashboard` (Início) — resumo rápido do mês: recebido/gasto/saldo,
+  gastos por Casal/Cônjuge 1/Cônjuge 2 (toque para filtrar), avisos de
+  fatura/parcela vencendo em até 7 dias e de despesas sem categoria, com
+  link para os relatórios completos.
+- `/movimentacoes` (Movimentações) — Todas (`/transactions`, com categoria
+  agrupada, responsável, parcelamento e recorrência; editar sempre permite
+  corrigir a categoria), Pendentes de classificação (`/import/review`),
+  Receitas e Despesas (`/transactions?type=...`).
+- `/contas` (Contas) — Bancos (`/accounts`), Cartões (`/cards`, com fatura
+  em `/cards/[id]`), Investimentos (`/investments`, aportes/resgates em
+  `/investments/[id]`), Empréstimos (`/loans`, pagamentos em `/loans/[id]`),
+  Transferências (`/transfers`).
+- `/relatorios` (Relatórios) — Evolução mensal (`/relatorios/evolucao`),
+  Categorias (`/relatorios/categorias`: gráfico, lista "Onde gastamos
+  nosso dinheiro?" e ranking das maiores despesas), Casal x individuais
+  (`/relatorios/responsaveis`: comparativo do mês + tendência de 6 meses).
+- `/configuracoes` (Configurações) — Perfil (`/profile`), Casal
+  (`/configuracoes/casal`: membros, convite, renomear família), Categorias
+  (`/configuracoes/categorias`, catálogo somente leitura), Regras
+  automáticas (`/import/rules`), Importações (`/import`, upload de
+  CSV/OFX), Bancos conectados (`/configuracoes/bancos`, placeholder
+  explicando que Open Finance é uma etapa futura), Segurança
+  (`/configuracoes/seguranca`: o que é garantido + trocar senha).
 
 ## Scripts
 
@@ -215,5 +286,31 @@ nesta base de dados.
   `npm audit` acusa CVEs do Next.js/PostCSS que afetam principalmente
   recursos não usados aqui (otimização de imagem, servidor customizado,
   i18n); vale reavaliar ao planejar produção.
-- `recharts` já está instalado para os gráficos do dashboard de uma próxima
-  etapa.
+- `recharts` já é usado nos gráficos de `/dashboard` e `/relatorios`.
+
+## Validação (checklist da Etapa 5)
+
+Revisado nesta etapa antes de considerá-la concluída:
+
+- ✅ RLS habilitado e com política em **todas** as 17 tabelas de dados do
+  household + as 2 do catálogo global (conferido lendo as 5 migrations).
+- ✅ Nenhuma chave de serviço (`SUPABASE_SERVICE_ROLE_KEY`) é referenciada em
+  código de app (`src/`); nenhum campo de senha/credencial bancária existe
+  no schema.
+- ✅ Transferência e pagamento de fatura são tabelas próprias — nunca viram
+  linha em `transactions`.
+- ✅ Dinheiro em `bigint` centavos em todo o schema; parcelamento distribui
+  o total exato (resto vai para a última parcela).
+- 🔧 **Corrigida nesta etapa**: condição de corrida em
+  `generate_due_recurring_transactions` — duas chamadas concorrentes (ex.:
+  duas abas abertas) podiam gerar a mesma ocorrência recorrente duas vezes.
+  Corrigida travando a linha (`FOR UPDATE`) na origem, não com um workaround
+  no frontend (`0005_fix_recurring_race_condition.sql`).
+- ✅ Estados de carregamento e erro agora cobrem toda a área autenticada
+  (`(app)/loading.tsx`, `(app)/error.tsx`, com versões específicas em
+  `/dashboard`), além dos estados vazios que cada lista já tinha.
+- ⚠️ Ainda não validado com um banco Supabase real de ponta a ponta (este
+  ambiente não provisiona um projeto Supabase) — o `npm run build` valida
+  tipos e compilação, mas o comportamento do RLS/triggers em produção deve
+  ser testado manualmente com o casal real antes de ir ao ar, seguindo os
+  16 pontos desta checklist.

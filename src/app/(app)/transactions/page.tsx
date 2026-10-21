@@ -1,13 +1,16 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listTransactions } from '@/lib/firestore/transactions';
+import { generateDueRecurringTransactions } from '@/lib/firestore/recurringTransactions';
+import { listActiveAccounts } from '@/lib/firestore/accounts';
+import { listActiveCards } from '@/lib/firestore/cards';
 import { getCategoryOptions } from '@/lib/categories';
 import { formatCentsToBRL, formatDate, toDateInputValue } from '@/lib/format';
 import { Card } from '@/components/ui/Card';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { createTransaction, deleteTransaction } from './actions';
 import { TransactionForm } from './TransactionForm';
-import type { ExpenseScope, TransactionType } from '@/types/database';
+import type { ExpenseScope, TransactionType } from '@/types/firestore';
 import { SCOPE_LABEL, TRANSACTION_TYPE_LABEL } from '@/lib/labels';
 import { parseMonthParam, shiftMonthParam } from '@/lib/month';
 
@@ -25,58 +28,29 @@ export default async function TransactionsPage({
   searchParams: { month?: string; categoryId?: string; scope?: string; type?: string };
 }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
   // Materialize any recurring occurrences due up to today before listing.
-  await supabase.rpc('generate_due_recurring_transactions', { p_household_id: user.householdId });
+  await generateDueRecurringTransactions(user.householdId);
 
   const { year, month, start, end } = parseMonthParam(searchParams.month);
 
-  let transactionsQuery = supabase
-    .from('transactions')
-    .select(
-      'id, type, amount_cents, occurred_on, description, scope, category_id, installment_number, installment_total, import_batch_id',
-    )
-    .eq('household_id', user.householdId)
-    .gte('occurred_on', toDateInputValue(start))
-    .lt('occurred_on', toDateInputValue(end))
-    .is('deleted_at', null);
-
-  if (searchParams.categoryId === 'none') {
-    transactionsQuery = transactionsQuery.is('category_id', null);
-  } else if (searchParams.categoryId) {
-    transactionsQuery = transactionsQuery.eq('category_id', searchParams.categoryId);
-  }
-  if (searchParams.scope) {
-    transactionsQuery = transactionsQuery.eq('scope', searchParams.scope as ExpenseScope);
-  }
-  if (searchParams.type) {
-    transactionsQuery = transactionsQuery.eq('type', searchParams.type as TransactionType);
-  }
-
-  const [categories, { data: accounts }, { data: cards }, { data: transactions }] = await Promise.all([
-    getCategoryOptions(supabase),
-    supabase
-      .from('accounts')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('name'),
-    supabase
-      .from('credit_cards')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('name'),
-    transactionsQuery.order('occurred_on', { ascending: false }),
+  const [categories, accounts, cards, transactions] = await Promise.all([
+    getCategoryOptions(),
+    listActiveAccounts(user.householdId),
+    listActiveCards(user.householdId),
+    listTransactions(user.householdId, {
+      startInclusive: toDateInputValue(start),
+      endExclusive: toDateInputValue(end),
+      categoryId: searchParams.categoryId as 'none' | undefined,
+      scope: searchParams.scope as ExpenseScope | undefined,
+      type: searchParams.type as TransactionType | undefined,
+    }),
   ]);
 
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
 
-  const totalIncome = (transactions ?? []).filter((t) => t.type === 'INCOME').reduce((s, t) => s + t.amount_cents, 0);
-  const totalExpense = (transactions ?? []).filter((t) => t.type === 'EXPENSE').reduce((s, t) => s + t.amount_cents, 0);
+  const totalIncome = transactions.filter((t) => t.type === 'INCOME').reduce((s, t) => s + t.amountCents, 0);
+  const totalExpense = transactions.filter((t) => t.type === 'EXPENSE').reduce((s, t) => s + t.amountCents, 0);
 
   const monthLabel = start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
@@ -137,8 +111,8 @@ export default async function TransactionsPage({
           <TransactionForm
             action={createTransaction}
             categories={categories}
-            accounts={accounts ?? []}
-            cards={cards ?? []}
+            accounts={accounts}
+            cards={cards}
             allowRepetition
             defaultValues={{
               type: 'EXPENSE',
@@ -151,34 +125,32 @@ export default async function TransactionsPage({
       </details>
 
       <div className="space-y-2">
-        {(!transactions || transactions.length === 0) && (
-          <p className="text-sm text-slate-400">Nenhum lançamento neste mês ainda.</p>
-        )}
-        {transactions?.map((t) => (
+        {transactions.length === 0 && <p className="text-sm text-slate-400">Nenhum lançamento neste mês ainda.</p>}
+        {transactions.map((t) => (
           <Card key={t.id} className="flex items-center justify-between p-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-slate-900">
                 {t.description}
-                {t.installment_total ? (
+                {t.installmentTotal ? (
                   <span className="ml-1 text-xs font-normal text-slate-400">
-                    ({t.installment_number}/{t.installment_total})
+                    ({t.installmentNumber}/{t.installmentTotal})
                   </span>
                 ) : null}
-                {t.import_batch_id && (
+                {t.importBatchId && (
                   <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
                     Importado
                   </span>
                 )}
               </p>
               <p className="text-xs text-slate-500">
-                {formatDate(t.occurred_on)} · {SCOPE_LABEL[t.scope]} ·{' '}
-                {t.category_id ? categoryNameById.get(t.category_id) ?? 'Categoria' : 'Sem categoria'}
+                {formatDate(t.occurredOn)} · {SCOPE_LABEL[t.scope]} ·{' '}
+                {t.categoryId ? categoryNameById.get(t.categoryId) ?? 'Categoria' : 'Sem categoria'}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3 pl-2">
               <span className={t.type === 'INCOME' ? 'font-semibold text-income' : 'font-semibold text-expense'}>
                 {t.type === 'INCOME' ? '+' : '-'}
-                {formatCentsToBRL(t.amount_cents)}
+                {formatCentsToBRL(t.amountCents)}
               </span>
               <Link href={`/transactions/${t.id}/edit`} className="text-xs font-medium text-brand-600">
                 Editar

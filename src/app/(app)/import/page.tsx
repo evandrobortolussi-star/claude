@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listActiveAccounts } from '@/lib/firestore/accounts';
+import { listActiveCards } from '@/lib/firestore/cards';
+import { countPendingStaged } from '@/lib/firestore/importBatches';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
 import { Label, Select } from '@/components/ui/Input';
@@ -8,28 +10,11 @@ import { importStatement } from './actions';
 
 export default async function ImportPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
-  const [{ data: accounts }, { data: cards }, { count: pendingCount }] = await Promise.all([
-    supabase
-      .from('accounts')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('name'),
-    supabase
-      .from('credit_cards')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('name'),
-    supabase
-      .from('import_staged_transactions')
-      .select('id', { count: 'exact', head: true })
-      .eq('household_id', user.householdId)
-      .in('status', ['PENDING', 'SUGGESTED']),
+  const [accounts, cards, pendingCount] = await Promise.all([
+    listActiveAccounts(user.householdId),
+    listActiveCards(user.householdId),
+    countPendingStaged(user.householdId),
   ]);
 
   return (
@@ -57,12 +42,12 @@ export default async function ImportPage() {
               <option value="" disabled>
                 Selecione a conta ou cartão
               </option>
-              {accounts?.map((a) => (
+              {accounts.map((a) => (
                 <option key={a.id} value={`account:${a.id}`}>
                   Conta: {a.name}
                 </option>
               ))}
-              {cards?.map((c) => (
+              {cards.map((c) => (
                 <option key={c.id} value={`card:${c.id}`}>
                   Cartão: {c.name}
                 </option>

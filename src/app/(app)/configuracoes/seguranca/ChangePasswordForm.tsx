@@ -1,7 +1,8 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { updatePassword } from 'firebase/auth';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, FieldError } from '@/components/ui/Input';
 
@@ -25,17 +26,22 @@ export function ChangePasswordForm() {
     }
 
     setLoading(true);
-    const supabase = createClient();
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-
-    if (updateError) {
-      setError('Não foi possível trocar a senha. Tente novamente.');
-      return;
+    try {
+      const user = getFirebaseAuth().currentUser;
+      if (!user) throw new Error('not-signed-in');
+      await updatePassword(user, password);
+      setSuccess(true);
+      e.currentTarget.reset();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code.includes('requires-recent-login')) {
+        setError('Por segurança, saia e entre novamente antes de trocar a senha.');
+      } else {
+        setError('Não foi possível trocar a senha. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setSuccess(true);
-    e.currentTarget.reset();
   }
 
   return (

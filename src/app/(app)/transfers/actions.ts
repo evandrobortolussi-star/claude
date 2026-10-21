@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
 import { parseBRLToCents } from '@/lib/format';
+import * as transfersDb from '@/lib/firestore/transfers';
 
 const transferSchema = z
   .object({
@@ -22,25 +22,20 @@ const transferSchema = z
 export async function createTransfer(formData: FormData) {
   const user = await requireCurrentUser();
   const parsed = transferSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase.from('transfers').insert({
-    household_id: user.householdId,
-    from_account_id: parsed.fromAccountId,
-    to_account_id: parsed.toAccountId,
-    amount_cents: parseBRLToCents(parsed.amount),
-    occurred_on: parsed.occurredOn,
+  await transfersDb.createTransfer(user.householdId, user.id, {
+    fromAccountId: parsed.fromAccountId,
+    toAccountId: parsed.toAccountId,
+    amountCents: parseBRLToCents(parsed.amount),
+    occurredOn: parsed.occurredOn,
     notes: parsed.notes || null,
   });
-
-  if (error) throw new Error('Não foi possível registrar a transferência.');
 
   revalidatePath('/transfers');
 }
 
 export async function deleteTransfer(id: string) {
-  await requireCurrentUser();
-  const supabase = createClient();
-  await supabase.from('transfers').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const user = await requireCurrentUser();
+  await transfersDb.softDeleteTransfer(user.householdId, id);
   revalidatePath('/transfers');
 }

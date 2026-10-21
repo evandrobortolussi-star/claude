@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
+import { renameHousehold as renameHouseholdInFirestore, updateOwnProfile } from '@/lib/firestore/households';
 
 export type FormActionState = { error?: string; success?: boolean };
 
@@ -19,16 +19,9 @@ export async function updateProfile(_prev: FormActionState, formData: FormData):
     return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
   }
 
-  const supabase = createClient();
-  // RLS ("a user can update their own profile") + a column grant restrict
-  // this to full_name/avatar_emoji on the caller's own row — the id in the
-  // filter is only for clarity, the database is what actually enforces it.
-  const { error } = await supabase
-    .from('profiles')
-    .update({ full_name: parsed.data.fullName, avatar_emoji: parsed.data.avatarEmoji })
-    .eq('id', user.id);
-
-  if (error) {
+  try {
+    await updateOwnProfile(user.id, parsed.data);
+  } catch {
     return { error: 'Não foi possível salvar. Tente novamente.' };
   }
 
@@ -47,21 +40,12 @@ export async function renameHousehold(_prev: FormActionState, formData: FormData
     return { error: parsed.error.issues[0]?.message ?? 'Dados inválidos.' };
   }
 
-  const supabase = createClient();
-  // Only the OWNER's request will actually match the "owner can rename
-  // their household" RLS policy — a MEMBER's update simply affects 0 rows.
-  const { error, count } = await supabase
-    .from('households')
-    .update({ name: parsed.data.name }, { count: 'exact' })
-    .eq('id', user.householdId);
-
-  if (error) {
-    return { error: 'Não foi possível salvar. Tente novamente.' };
-  }
-  if (!count) {
+  const { ok } = await renameHouseholdInFirestore(user.id, user.householdId, parsed.data.name);
+  if (!ok) {
     return { error: 'Apenas o titular da família pode renomeá-la.' };
   }
 
   revalidatePath('/profile');
+  revalidatePath('/configuracoes/casal');
   return { success: true };
 }

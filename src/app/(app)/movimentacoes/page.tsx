@@ -1,16 +1,10 @@
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { countPendingStaged } from '@/lib/firestore/importBatches';
 import { SectionLink } from '@/components/SectionMenu';
 
 export default async function MovimentacoesPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
-
-  const { count: pendingCount } = await supabase
-    .from('import_staged_transactions')
-    .select('id', { count: 'exact', head: true })
-    .eq('household_id', user.householdId)
-    .in('status', ['PENDING', 'SUGGESTED']);
+  const pendingCount = await countPendingStaged(user.householdId);
 
   return (
     <div className="space-y-6">
@@ -26,7 +20,7 @@ export default async function MovimentacoesPage() {
           icon="🔍"
           label="Pendentes de classificação"
           description="Revisar importações antes de confirmar"
-          badge={pendingCount ?? 0}
+          badge={pendingCount}
         />
         <SectionLink href="/transactions?type=INCOME" icon="💰" label="Receitas" />
         <SectionLink href="/transactions?type=EXPENSE" icon="💸" label="Despesas" />

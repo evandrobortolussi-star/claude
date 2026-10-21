@@ -17,118 +17,101 @@ Este repositório está sendo construído em etapas.
   Movimentações, Contas, Relatórios, Configurações), separação mais clara
   entre UI/regras de negócio/acesso a dados, e auditoria de segurança —
   Open Finance continua adiado por decisão do produto (ver abaixo).
+- **Migração Firebase** (concluída): backend trocado de Supabase (Postgres +
+  RLS) para Firebase (Firestore + Authentication), preservando as mesmas
+  garantias de segurança e integridade — ver "Por que Firebase" abaixo.
 
 ## Stack
 
 - **Next.js 14** (App Router) + TypeScript + Tailwind CSS
-- **Supabase** — Postgres + Auth + Row Level Security (RLS)
+- **Firebase** — Firestore (banco) + Authentication
 - PWA (instalável na tela de início do iPhone)
 
-## Por que Supabase Auth + RLS
+## Por que Firebase: Admin SDK só no servidor, nunca Security Rules "RLS-like"
 
-Autorização nunca é decidida apenas no frontend. Toda regra de "quem pode ver
-o quê" está no banco de dados, como política de RLS — mesmo que exista um bug
-no app ou alguém chame a API diretamente, a resposta é filtrada pelo Postgres
-com base no usuário autenticado (`auth.uid()`), não em nada que o cliente
-enviou.
+Autorização nunca é decidida pelo frontend. Em vez de tentar recriar Row
+Level Security dentro de Firestore Security Rules (caminho frágil para
+validações procedurais como "a categoria bate com o tipo do lançamento" ou
+"atualizar o saldo devedor atomicamente"), este app usa um modelo mais
+simples e igualmente seguro:
 
-## Modelo de dados (Etapa 1)
+- **Firestore Security Rules negam tudo** (`allow read, write: if false`) em
+  toda coleção, exceto leitura do catálogo global de categorias. Nenhum
+  cliente (navegador) jamais lê ou escreve uma coleção de dados diretamente.
+- **Todo acesso a dados passa pelo Firebase Admin SDK**, rodando só no
+  servidor Next.js (Server Components, Server Actions e dois Route Handlers
+  de autenticação) — exatamente como, no modelo anterior, o navegador só
+  falava com o Supabase Auth e nunca consultava uma tabela direto.
+- Cada Server Action/Server Component relê a sessão
+  (`requireCurrentUser()`) e o perfil (`profiles/{uid}`) a cada chamada — o
+  `householdId`/`role` nunca vêm de algo que o cliente enviou.
 
-`supabase/migrations/0001_init.sql` cria:
+## Modelo de dados
 
-- **`households`** — a família (o casal). Tem `invite_code` para o segundo
-  cônjuge entrar.
-- **`profiles`** — um registro por usuário (`auth.users`), sempre no máximo 2
-  por família (`spouse_slot` 1 ou 2), com nome, avatar e papel
-  (`OWNER`/`MEMBER`).
-- **`expense_scope`** (enum `FAMILY` / `SPOUSE_1` / `SPOUSE_2`) — a
-  classificação de despesas como familiar ou individual de cada cônjuge,
-  criada agora para ser usada pela tabela de lançamentos de uma próxima
-  etapa.
-- Uma trigger `handle_new_user()` (SECURITY DEFINER) que roda no cadastro:
-  lê `mode` (`create`/`join`) dos metadados passados a `supabase.auth.signUp`
-  e cria a família + perfil, ou entra numa família existente pelo
-  `invite_code`. Isso significa que a criação de família nunca é feita por
-  código do cliente — é sempre a mesma transação atômica do cadastro.
+Coleções no Firestore (ver `src/types/firestore.ts` para os tipos completos):
 
-### Segurança aplicada nesta etapa
-
-- **RLS habilitado em todas as tabelas.** Um usuário só enxerga linhas da
-  própria família, via as funções auxiliares `is_household_member()` /
-  `is_household_owner()` (que leem `auth.uid()`).
-- **Sem grant de INSERT/DELETE** para o papel `authenticated` em
-  `households`/`profiles` — essas linhas só existem através da trigger de
-  cadastro. Um usuário não consegue fabricar uma família ou se anexar a
-  outra por conta própria.
-- **Grants por coluna**: mesmo dentro da própria linha, um usuário só pode
-  dar `UPDATE` em `profiles (full_name, avatar_emoji)` e em
-  `households (name)` — não pode mudar `household_id`, `spouse_slot`,
-  `role`, etc., mesmo que tente manipular a chamada.
-- **Nunca armazenamos senha ou token de banco.** Não existe nenhuma coluna
-  para isso no schema atual.
-- **`created_at`/`updated_at`** em todos os registros (trigger genérica
-  `set_updated_at()`).
-- Middleware do Next.js chama `supabase.auth.getUser()` (não apenas lê o
-  cookie) a cada requisição, o que valida o JWT contra o servidor do
-  Supabase antes de liberar qualquer rota protegida.
-
-## Modelo de dados (Etapa 2)
-
-`supabase/migrations/0002_finance_core.sql` (schema) e `0003_seed_categories.sql`
-(categorias iniciais) criam o núcleo financeiro:
-
-- **Dinheiro sempre em `bigint` centavos** — nunca `numeric`/ponto flutuante.
-  A UI formata/parseia BRL (`src/lib/format.ts`), mas o banco só guarda
-  inteiros.
-- **`accounts`** (corrente/poupança/dinheiro), **`credit_cards`** (limite,
-  fechamento, vencimento), **`investments`** + **`investment_movements`**
-  (saldo é sempre a soma dos aportes/resgates, nunca um valor em cache) e
-  **`loans`** (empréstimo/financiamento) + **`loan_payments`** — cada
-  pagamento abate `outstanding_balance_cents` via trigger
-  (`apply_loan_payment`), e o `UPDATE` grant do cliente em `loans`
-  explicitamente **não inclui** essa coluna: só um pagamento pode mudar o
-  saldo devedor.
-- **`transactions`** (receita/despesa) com `category_id`, `account_id`
-  *ou* `card_id` (nunca os dois), `scope` (`FAMILY`/`SPOUSE_1`/`SPOUSE_2` —
-  Casal/Cônjuge 1/Cônjuge 2), e suporte a parcelamento
-  (`installment_group_id`/`installment_number`/`installment_total`, uma
-  linha por parcela, cada uma na sua data) e recorrência
-  (`recurring_transactions` como template; a RPC
-  `generate_due_recurring_transactions` materializa as ocorrências
-  pendentes de forma idempotente, chamada ao abrir a tela de lançamentos).
-- **`transfers`** e **`card_payments`** são tabelas **separadas** de
+- **`profiles/{uid}`** — um documento por usuário do Firebase Auth, sempre
+  no máximo 2 por família (`spouseSlot` 1 ou 2), com nome, avatar e papel
+  (`OWNER`/`MEMBER`). Chave = uid, para achar a família de qualquer usuário
+  autenticado sem precisar saber o `householdId` antes.
+- **`households/{householdId}`** — a família (o casal), com `inviteCode`
+  para o segundo cônjuge entrar.
+- **`categoryGroups/{id}` / `categories/{id}`** — catálogo global (não por
+  família, é só uma taxonomia compartilhada), somente leitura, seedado uma
+  vez via `scripts/seed-categories.ts` (IDs determinísticos — rodar de novo
+  é seguro, nunca duplica).
+- Dentro de **`households/{householdId}/...`**, uma subcoleção por domínio:
+  `accounts`, `creditCards`, `investments`, `investmentMovements`, `loans`,
+  `loanPayments`, `recurringTransactions`, `transactions`, `transfers`,
+  `cardPayments`, `classificationRules`, `importBatches`,
+  `importStagedTransactions`.
+- **Dinheiro sempre em `number` inteiro de centavos** — nunca ponto
+  flutuante. A UI formata/parseia BRL (`src/lib/format.ts`), o banco só
+  guarda inteiros (mesma garantia do antigo `bigint` do Postgres).
+- **`transactions`** (receita/despesa) com `categoryId`, `accountId` *ou*
+  `cardId` (nunca os dois), `scope` (`FAMILY`/`SPOUSE_1`/`SPOUSE_2` —
+  Casal/Cônjuge 1/Cônjuge 2), parcelamento (`installmentGroupId`/
+  `installmentNumber`/`installmentTotal`, um documento por parcela) e
+  recorrência (`recurringTransactions` como template;
+  `generateDueRecurringTransactions()` em
+  `src/lib/firestore/recurringTransactions.ts` materializa as ocorrências
+  pendentes de forma idempotente, chamada ao abrir a tela de lançamentos,
+  usando uma transação Firestore por template para nunca gerar a mesma
+  ocorrência duas vezes mesmo com duas abas abertas ao mesmo tempo).
+- **`transfers`** e **`cardPayments`** são coleções **separadas** de
   `transactions` — de propósito: uma transferência entre contas nunca é
   receita/despesa, e pagar a fatura do cartão nunca duplica uma compra que
   já virou despesa quando aconteceu.
-- **`category_groups`/`categories`**: catálogo global (não por família,
-  já que é apenas uma taxonomia compartilhada), somente leitura para
-  `authenticated` — exatamente os grupos/categorias do produto, sem inflar
-  a lista.
-- Um trigger (`validate_transaction_row` e equivalentes para
-  transferências/pagamentos/movimentos) confere no banco que
-  conta/cartão/categoria pertencem à mesma família **antes** de gravar —
+- Cada pagamento de empréstimo (`loanPayments`) abate
+  `outstandingBalanceCents` do `loans` pai **atomicamente**, via uma
+  transação Firestore em `src/lib/firestore/loans.ts` (`createLoanPayment`)
+  — a mesma garantia que uma trigger de banco daria, só que em código
+  Node em vez de SQL.
+- Toda validação de referência (categoria bate com o tipo do lançamento,
+  conta/cartão pertence à mesma família e não está arquivado) é checada
+  explicitamente no início de cada função de `src/lib/firestore/*.ts` —
   nunca confiando que o cliente mandou um id correto.
 
 ### Nada é excluído de verdade
 
-Toda tabela financeira tem `deleted_at`, e **não existe `GRANT DELETE`** para
-`authenticated` em nenhuma delas — o botão "Excluir" na UI sempre pede
-confirmação e faz um `UPDATE` marcando `deleted_at`, nunca um `DELETE` real.
-Um pagamento de empréstimo excluído reverte automaticamente o saldo devedor
-(mesmo trigger, tratando a transição de `deleted_at`).
+Toda coleção financeira tem `deletedAt`, e nenhuma função em
+`src/lib/firestore/*.ts` implementa uma exclusão real — "deletar" é sempre
+marcar `deletedAt`, nunca remover o documento. As Security Rules também
+negam `delete` em tudo, como reforço. O botão "Excluir" na UI sempre pede
+confirmação antes. Um pagamento de empréstimo excluído reverte
+automaticamente o saldo devedor (mesma transação Firestore, tratando a
+transição de `deletedAt`).
 
-## Importação e classificação inteligente (Etapa 3)
+## Importação e classificação inteligente
 
-`supabase/migrations/0004_import_and_rules.sql` adiciona:
-
-- **`import_batches`** — um registro por arquivo importado (auditoria: de
+- **`importBatches`** — um documento por arquivo importado (auditoria: de
   onde veio cada movimentação).
-- **`import_staged_transactions`** — a fila de revisão. Uma linha importada
+- **`importStagedTransactions`** — a fila de revisão. Uma linha importada
   **nunca** vira `transactions` direto: ela fica em `PENDING`/`SUGGESTED`
   até o usuário confirmar em `/import/review`, e só aí uma transação real é
-  criada. Ignorar mantém a linha (`status = 'IGNORED'`) em vez de apagá-la —
-  o histórico da importação nunca desaparece.
-- **`classification_rules`** — o "aprendizado": ao confirmar uma
+  criada. Ignorar mantém o documento (`status = 'IGNORED'`) em vez de
+  apagá-lo — o histórico da importação nunca desaparece.
+- **`classificationRules`** — o "aprendizado": ao confirmar uma
   classificação, o sistema grava (ou atualiza) uma regra ligando o padrão
   normalizado da descrição à categoria e ao responsável escolhidos. Da
   próxima vez que uma descrição parecida aparecer, ela chega já como
@@ -137,63 +120,66 @@ Um pagamento de empréstimo excluído reverte automaticamente o saldo devedor
   sugestões futuras; nada em `transactions` é reescrito.
 - **Parsers plugáveis** (`src/lib/import/{csv,ofx,index}.ts`): cada formato
   implementa `StatementParser.canParse`/`parse`; adicionar um novo formato é
-  só empurrar mais um parser no array `PARSERS`, sem tocar no resto.
+  só empurrar mais um parser no array `PARSERS`, sem tocar no resto. Zero
+  acoplamento a Firestore/Supabase — pura função de parsing, sobreviveu à
+  migração sem mudar uma linha.
 - **Normalização** (`src/lib/normalize.ts`): remove acentos, dígitos,
   pontuação e sufixos como LTDA/ME antes de comparar — assim
   "SUPERMERCADO XYZ LTDA 04/09" e "Supermercado XYZ Ltda 05/10" batem com a
   mesma regra.
 - **Duplicidade nunca decide sozinha**: cada linha importada é comparada
   (mesma conta/cartão, valor igual, data a até 2 dias de distância, ou
-  `external_id` idêntico — o FITID do OFX) contra transações já existentes
+  `externalId` idêntico — o FITID do OFX) contra transações já existentes
   e contra outras importações ainda não revisadas. Uma correspondência só
   acende o aviso "Possível duplicata" na tela de revisão; nada é
   descartado automaticamente.
 
 ### Sobre Open Finance (preparação)
 
-Nenhuma tabela de conexão bancária foi criada ainda — por decisão do
+Nenhuma coleção de conexão bancária foi criada ainda — por decisão do
 produto, adiada para depois de validar bem a base manual/importação com o
 casal de verdade (ver `/configuracoes/bancos` no app). Quando a integração
-Open Finance chegar, o desenho será: uma tabela `open_finance_connections`
-guardando **apenas metadados** (provedor, id da instituição, status) — o
-token de acesso emitido pelo agregador (ex. Pluggy/Belvo) deve ficar em um
-cofre de segredos dedicado (ou no próprio provedor), nunca em texto puro
-nesta base de dados.
+Open Finance chegar, o desenho será: uma coleção guardando **apenas
+metadados** (provedor, id da instituição, status) — o token de acesso
+emitido pelo agregador (ex. Pluggy/Belvo) deve ficar em um cofre de
+segredos dedicado (Secret Manager), nunca em texto puro no Firestore.
 
-## Arquitetura modular (Etapa 5)
+## Arquitetura modular
 
-O código já nasceu separado por responsabilidade; esta etapa reforçou e
-documentou essa separação:
+O código já nasceu separado por responsabilidade; essa separação se manteve
+na migração para Firebase, trocando só a implementação da camada de dados:
 
 - **UI** (`src/app/**/page.tsx`, `src/components/`) — só apresentação e
-  formulários. Nenhuma página monta uma query SQL "de negócio" complexa
+  formulários. Nenhuma página monta uma query "de negócio" complexa
   sozinha: ela chama funções de `src/lib/`.
 - **Regras de negócio e agregações** (`src/lib/dashboard.ts`,
   `src/lib/import/matching.ts`) — cálculos puros (totais, distribuição por
-  categoria/responsável, sugestão de regra, detecção de duplicidade) que
-  recebem dados já buscados e não sabem nada de React ou Supabase além do
-  tipo do cliente. Testáveis isoladamente da UI.
-- **Acesso a dados** — Server Actions (`actions.ts` em cada rota) e
-  `src/lib/supabase/{client,server}.ts`. Sempre o cliente com a chave anon +
-  sessão do usuário — nunca a service role — para que a autorização real
-  aconteça no Postgres (RLS), não no código do servidor Next.js.
+  categoria/responsável, sugestão de regra, detecção de duplicidade).
+  Testáveis isoladamente da UI.
+- **Acesso a dados** (`src/lib/firestore/*.ts`) — um módulo por domínio
+  (accounts, cards, investments, loans, transactions,
+  recurringTransactions, transfers, classificationRules, importBatches,
+  categories, households), cada um usando o Firebase Admin SDK
+  (`src/lib/firebase/admin.ts`) e reimplementando em TypeScript toda
+  validação/transação que antes vivia em triggers SQL.
 - **Processamento de importação** (`src/lib/import/{csv,ofx,index}.ts`) —
   isolado da tela: cada formato é um `StatementParser` independente,
   testável sem subir a UI.
 - **Classificação automática** (`src/lib/normalize.ts` +
-  `src/lib/import/matching.ts` + tabela `classification_rules`) — a lógica
+  `src/lib/import/matching.ts` + coleção `classificationRules`) — a lógica
   de "qual regra combina com esta descrição" vive nesses dois arquivos,
   reutilizável tanto no momento da importação quanto numa futura tela de
   reclassificação em lote.
 - **Autenticação/autorização** (`src/lib/session.ts`, `src/middleware.ts`,
-  `supabase/migrations/*.sql`) — a fonte da verdade de "quem pode ver o
-  quê" é sempre o banco (RLS); o código do app só lê a sessão, nunca decide
-  sozinho uma permissão.
+  `src/lib/firebase/{admin,client}.ts`, `firestore.rules`) — a fonte da
+  verdade de "quem pode ver o quê" é sempre o servidor (Admin SDK + sessão
+  verificada); Security Rules negam qualquer acesso direto do cliente como
+  reforço; o código de UI nunca decide sozinho uma permissão.
 - **Vocabulário compartilhado** (`src/lib/labels.ts`) — nomes exibidos
   (Casal/Cônjuge 1/Cônjuge 2, tipos de conta, etc.) vivem num só lugar em
   vez de copiados por componente.
 
-### Navegação (Etapa 5)
+### Navegação
 
 Cinco seções fixas na navegação inferior, cada uma com uma página "hub"
 listando seus subitens (padrão comum em apps mobile quando uma aba tem
@@ -224,30 +210,35 @@ acoplar regras financeiras a componentes React específicos).
 
 ## Configurando o projeto
 
-1. Crie um projeto em [supabase.com](https://supabase.com).
-2. Em **SQL Editor**, rode as migrations em ordem —
-   `0001_init.sql`, `0002_finance_core.sql`, `0003_seed_categories.sql`,
-   `0004_import_and_rules.sql`, `0005_fix_recurring_race_condition.sql`
-   (ou use a CLI do Supabase: `supabase db push`).
-3. Em **Authentication → Providers → Email**, decida se quer exigir
-   confirmação de email (recomendado em produção; pode desativar em
-   desenvolvimento para testar mais rápido).
-4. Em **Project Settings → API**, copie a URL e a `anon` key.
-5. Copie `.env.example` para `.env.local` e preencha:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=...
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-   NEXT_PUBLIC_SITE_URL=http://localhost:3000
-   ```
-6. `npm install`
-7. `npm run dev`
+1. Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com).
+2. Em **Build → Firestore Database**, crie o banco em **modo de produção**
+   (nunca "test mode").
+3. Em **Build → Authentication → Sign-in method**, habilite o provedor
+   **Email/Password**.
+4. Em **Project settings → General → Your apps**, registre um app Web
+   (ícone `</>`) e copie o bloco `firebaseConfig`.
+5. Em **Project settings → Service accounts**, gere uma chave privada
+   (**Generate new private key**) — é a credencial do Admin SDK, nunca deve
+   ser commitada.
+6. Copie `.env.example` para `.env.local` e preencha com os valores do
+   passo 4 (`NEXT_PUBLIC_FIREBASE_*`) e, para rodar localmente, o conteúdo
+   do JSON do passo 5 em `FIREBASE_SERVICE_ACCOUNT_KEY` (em produção no
+   Firebase App Hosting isso é automático via Application Default
+   Credentials, sem precisar dessa variável).
+7. `npm install`
+8. `npm run seed:categories` — popula o catálogo de categorias (idempotente,
+   pode rodar quantas vezes quiser).
+9. `firebase deploy --only firestore:rules,firestore:indexes` (requer
+   `firebase-tools` instalado e `firebase use <project-id>` apontando para o
+   projeto criado no passo 1) para publicar `firestore.rules`.
+10. `npm run dev`
 
 ## Estrutura do app
 
 - `/register` — criar uma família nova (você vira o "titular") ou entrar
   numa família existente com um código de convite.
 - `/login`, `/forgot-password`, `/reset-password` — autenticação e
-  recuperação de senha via Supabase Auth.
+  recuperação de senha via Firebase Authentication.
 - `/dashboard` (Início) — resumo rápido do mês: recebido/gasto/saldo,
   gastos por Casal/Cônjuge 1/Cônjuge 2 (toque para filtrar), avisos de
   fatura/parcela vencendo em até 7 dias e de despesas sem categoria, com
@@ -278,15 +269,19 @@ acoplar regras financeiras a componentes React específicos).
 - `npm run build` / `npm run start` — build e execução em produção
 - `npm run typecheck` — checagem de tipos
 - `npm run lint` — lint do Next.js
+- `npm run seed:categories` — popula/atualiza o catálogo global de categorias
 
 ## Notas
 
 - Next.js está fixado em `14.2.x` (App Router estável, sem as mudanças
-  assíncronas de `params`/`cookies()` introduzidas no Next 15+). O
-  `npm audit` acusa CVEs do Next.js/PostCSS que afetam principalmente
-  recursos não usados aqui (otimização de imagem, servidor customizado,
-  i18n); vale reavaliar ao planejar produção.
+  assíncronas de `params`/`cookies()` introduzidas no Next 15+).
 - `recharts` já é usado nos gráficos de `/dashboard` e `/relatorios`.
+- O middleware (`src/middleware.ts`) verifica a assinatura do cookie de
+  sessão do Firebase via `jose` + as chaves públicas do Google, direto no
+  runtime Edge — rápido, mas só confirma assinatura/validade/expiração. A
+  checagem definitiva (incluindo revogação) acontece em
+  `requireCurrentUser()`, no servidor, via Admin SDK, em toda página
+  protegida.
 
 ## Validação
 
@@ -294,35 +289,36 @@ acoplar regras financeiras a componentes React específicos).
 
 | # | Ponto | Status | Onde/como |
 |---|---|---|---|
-| 1 | Usuário não acessa dados de outra família | ✅ | RLS com `is_household_member(household_id)` em toda tabela de dados (conferido lendo as 5 migrations) |
-| 2 | Casal compartilha movimentações corretamente | ✅ | Mesma `household_id` para os 2 `spouse_slot`; toda query é por família, não por usuário |
-| 3 | Gastos individuais aparecem por cônjuge e no consolidado | ✅ | Coluna `scope`; `summarizeByScope` soma por responsável, `summarizeTotals` soma tudo |
-| 4 | Transferência nunca é receita/despesa | ✅ | Tabela `transfers` própria, sem ligação com `transactions` |
-| 5 | Pagamento de fatura não duplica despesa | ✅ | Tabela `card_payments` própria; a compra já virou despesa quando aconteceu |
-| 6 | Importação não duplica transações | ✅ | `possible_duplicate` sinaliza (conta+valor+data±2 dias, ou FITID exato) — nunca bloqueia nem apaga sozinho, por decisão do produto |
-| 7 | Classificações aprendidas funcionam em novas importações | ✅ | `classification_rules` casadas por substring da descrição normalizada, testado no fluxo de `/import/review` |
+| 1 | Usuário não acessa dados de outra família | ✅ | Toda leitura passa por `requireCurrentUser()` + módulos de `src/lib/firestore/*.ts` escopados por `householdId`; Security Rules negam qualquer acesso direto do cliente |
+| 2 | Casal compartilha movimentações corretamente | ✅ | Mesmo `householdId` para os 2 `spouseSlot`; toda query é por família, não por usuário |
+| 3 | Gastos individuais aparecem por cônjuge e no consolidado | ✅ | Campo `scope`; `summarizeByScope` soma por responsável, `summarizeTotals` soma tudo |
+| 4 | Transferência nunca é receita/despesa | ✅ | Coleção `transfers` própria, sem ligação com `transactions` |
+| 5 | Pagamento de fatura não duplica despesa | ✅ | Coleção `cardPayments` própria; a compra já virou despesa quando aconteceu |
+| 6 | Importação não duplica transações | ✅ | `possibleDuplicate` sinaliza (conta+valor+data±2 dias, ou FITID exato) — nunca bloqueia nem apaga sozinho, por decisão do produto |
+| 7 | Classificações aprendidas funcionam em novas importações | ✅ | `classificationRules` casadas por substring da descrição normalizada, testado no fluxo de `/import/review` |
 | 8 | Usuário corrige qualquer sugestão automática | ✅ | Categoria/responsável em `StagedRow` sempre editáveis antes de confirmar; regras editáveis em `/import/rules` |
 | 9 | Dashboard calcula receita/despesa/saldo corretamente | ✅ | `summarizeTotals` — soma direta por tipo, sem lógica condicional escondida |
 | 10 | Parcelamentos distribuídos corretamente | ✅ | `base = total/n` com resto na última parcela — soma sempre bate com o total |
-| 11 | Precisão monetária | ✅ | `bigint` centavos em 100% do schema, nunca `numeric`/float |
-| 12 | Nenhum segredo no frontend | ✅ | Só a chave `anon` (pública por design) chega ao cliente; `SERVICE_ROLE_KEY` não é referenciada em `src/` |
+| 11 | Precisão monetária | ✅ | `number` inteiro de centavos em 100% do schema, nunca ponto flutuante |
+| 12 | Nenhum segredo no frontend | ✅ | Só a config pública do Firebase (`NEXT_PUBLIC_FIREBASE_*`, segura por design) chega ao cliente; a credencial do Admin SDK não é referenciada fora de `src/lib/firebase/admin.ts` |
 | 13 | Nenhuma credencial bancária armazenada | ✅ | Nenhum campo de senha/token de banco existe no schema |
-| 14 | RLS impede acesso indevido | ✅ | Mesmo ponto 1 — sem `GRANT` para `anon`, sem policy permissiva |
+| 14 | Autorização impede acesso indevido | ✅ | Mesmo ponto 1 — Security Rules deny-all + verificação server-side em toda função de dados |
 | 15 | Funciona em diferentes tamanhos de tela | ✅ | Mobile-first fluido (sem larguras fixas), `max-w` progressivo em `md`/`lg` |
 | 16 | Estados de loading/erro/vazio/sucesso | ✅ | `(app)/loading.tsx` + `(app)/error.tsx` cobrindo toda a área autenticada; toda lista tem mensagem de vazio; toda ação de escrita redireciona ou mostra confirmação |
 
-**Corrigida ao longo da validação**: condição de corrida em
-`generate_due_recurring_transactions` — duas chamadas concorrentes (ex.:
-duas abas abertas) podiam gerar a mesma ocorrência recorrente duas vezes.
-Corrigida travando a linha (`FOR UPDATE`) na origem, não com um workaround
-no frontend (`0005_fix_recurring_race_condition.sql`).
+**Corrigida ao longo da validação (ainda na versão Postgres, preservada na
+migração)**: condição de corrida na geração de recorrências — duas chamadas
+concorrentes (ex.: duas abas abertas) podiam gerar a mesma ocorrência
+recorrente duas vezes. Na versão Firestore, `generateDueRecurringTransactions()`
+usa uma transação por template, que dá a mesma garantia (retry automático
+em caso de disputa) sem precisar de nenhum workaround no frontend.
 
-⚠️ **Limite honesto**: nada disso foi validado com um banco Supabase real de
-ponta a ponta — este ambiente não provisiona um projeto Supabase. `npm run
-build` valida tipos e compilação; o comportamento do RLS/triggers em
-produção precisa ser testado manualmente com o casal real (crie duas
-famílias de teste e confirme que uma nunca vê dados da outra) antes de ir
-ao ar.
+⚠️ **Limite honesto**: nada disso foi validado com um projeto Firebase real
+de ponta a ponta neste ambiente — ele não provisiona um projeto Firebase.
+`npm run build`/`npm run typecheck` validam tipos e compilação; o
+comportamento das Security Rules e das transações em produção precisa ser
+testado manualmente com o casal real (crie duas famílias de teste e
+confirme que uma nunca vê dados da outra) antes de ir ao ar.
 
 ### iPhone e responsividade
 
@@ -345,18 +341,18 @@ ao ar.
 
 | # | O casal consegue... | Onde |
 |---|---|---|
-| 1 | Criar a família e acessar com segurança | `/register`, `/login`, RLS ponta a ponta |
+| 1 | Criar a família e acessar com segurança | `/register`, `/login`, Firebase Auth + Admin SDK ponta a ponta |
 | 2 | Cadastrar bancos, cartões, investimentos e empréstimos | `/contas` → `/accounts`, `/cards`, `/investments`, `/loans` |
 | 3 | Registrar receitas e despesas | `/movimentacoes` → `/transactions` |
 | 4 | Identificar cada gasto como casal ou individual | campo `scope` em todo lançamento |
 | 5 | Importar um extrato bancário | `/configuracoes` → `/import` (CSV/OFX) |
 | 6 | Revisar e classificar rapidamente | `/import/review` (categoria → responsável → confirmar) |
-| 7 | Fazer o sistema aprender classificações | `classification_rules`, gerido em `/import/rules` |
+| 7 | Fazer o sistema aprender classificações | `classificationRules`, gerido em `/import/rules` |
 | 8 | Visualizar quanto gastou no mês | `/dashboard` (Início) |
 | 9 | Entender quais setores consumiram mais | `/relatorios/categorias` |
 | 10 | Consultar a evolução dos gastos | `/relatorios/evolucao` |
 | 11 | Usar confortavelmente no iPhone | mobile-first, 44pt de tap target, sem zoom no Safari (ver acima) |
-| 12 | Ter arquitetura segura e pronta para Open Finance | RLS em tudo, sem credencial bancária, tabela de conexões desenhada mas não construída (ver seção acima) |
+| 12 | Ter arquitetura segura e pronta para Open Finance | Security Rules deny-all + Admin SDK, sem credencial bancária, desenho de coleção pronto mas não construído (ver seção acima) |
 
 Todos os 12 critérios têm uma tela/rota concreta hoje; nenhum depende de
 funcionalidade futura.

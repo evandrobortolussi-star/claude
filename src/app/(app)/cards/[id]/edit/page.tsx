@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { getCard } from '@/lib/firestore/cards';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -9,13 +9,7 @@ import { updateCard } from '../../actions';
 
 export default async function EditCardPage({ params }: { params: { id: string } }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
-  const { data: card } = await supabase
-    .from('credit_cards')
-    .select('id, name, brand, closing_day, due_day, limit_cents')
-    .eq('id', params.id)
-    .eq('household_id', user.householdId)
-    .single();
+  const card = await getCard(user.householdId, params.id);
 
   if (!card) notFound();
 
@@ -38,11 +32,11 @@ export default async function EditCardPage({ params }: { params: { id: string } 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="closingDay">Dia de fechamento</Label>
-              <Input id="closingDay" name="closingDay" type="number" min={1} max={31} defaultValue={card.closing_day} required />
+              <Input id="closingDay" name="closingDay" type="number" min={1} max={31} defaultValue={card.closingDay} required />
             </div>
             <div>
               <Label htmlFor="dueDay">Dia de vencimento</Label>
-              <Input id="dueDay" name="dueDay" type="number" min={1} max={31} defaultValue={card.due_day} required />
+              <Input id="dueDay" name="dueDay" type="number" min={1} max={31} defaultValue={card.dueDay} required />
             </div>
           </div>
           <div>
@@ -50,7 +44,7 @@ export default async function EditCardPage({ params }: { params: { id: string } 
             <Input
               id="limit"
               name="limit"
-              defaultValue={card.limit_cents != null ? formatCentsToBRL(card.limit_cents) : ''}
+              defaultValue={card.limitCents != null ? formatCentsToBRL(card.limitCents) : ''}
               inputMode="decimal"
             />
           </div>

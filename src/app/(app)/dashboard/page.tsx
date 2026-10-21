@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listActiveAccounts } from '@/lib/firestore/accounts';
+import { listActiveCards } from '@/lib/firestore/cards';
 import { getCategoryOptions } from '@/lib/categories';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import { parseMonthParam, shiftMonthParam } from '@/lib/month';
@@ -14,7 +15,7 @@ import {
 } from '@/lib/dashboard';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { DashboardFilters } from './DashboardFilters';
-import type { ExpenseScope } from '@/types/database';
+import type { ExpenseScope } from '@/types/firestore';
 import { SCOPE_LABEL } from '@/lib/labels';
 
 function withMonth(month: string, extra: Record<string, string | undefined>) {
@@ -37,7 +38,6 @@ export default async function DashboardPage({
   searchParams: { month?: string; scope?: string; accountId?: string; cardId?: string; categoryId?: string };
 }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
   const { year, month, start, end } = parseMonthParam(searchParams.month);
   const monthKey = `${year}-${String(month).padStart(2, '0')}`;
@@ -49,24 +49,12 @@ export default async function DashboardPage({
     categoryId: searchParams.categoryId || undefined,
   };
 
-  const [categories, { data: accounts }, { data: cards }, transactions, dueSoon] = await Promise.all([
-    getCategoryOptions(supabase),
-    supabase
-      .from('accounts')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('name'),
-    supabase
-      .from('credit_cards')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('name'),
-    getMonthTransactions(supabase, user.householdId, start, end, filters),
-    getUpcomingDueDates(supabase, user.householdId),
+  const [categories, accounts, cards, transactions, dueSoon] = await Promise.all([
+    getCategoryOptions(),
+    listActiveAccounts(user.householdId),
+    listActiveCards(user.householdId),
+    getMonthTransactions(user.householdId, start, end, filters),
+    getUpcomingDueDates(user.householdId),
   ]);
 
   const { income, expense, balance } = summarizeTotals(transactions);
@@ -92,8 +80,8 @@ export default async function DashboardPage({
       </div>
 
       <DashboardFilters
-        accounts={accounts ?? []}
-        cards={cards ?? []}
+        accounts={accounts}
+        cards={cards}
         categories={categories.filter((c) => c.kind === 'EXPENSE')}
       />
 

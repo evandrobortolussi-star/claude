@@ -2,34 +2,32 @@
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/Button';
-import { Input, Label, FieldError } from '@/components/ui/Input';
+import { Input, Label } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 
 export default function ForgotPasswordPage() {
-  const [error, setError] = useState<string>();
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(undefined);
     setLoading(true);
 
     const email = String(new FormData(e.currentTarget).get('email'));
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
 
-    const supabase = createClient();
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/reset-password`,
-    });
-
-    setLoading(false);
-    if (resetError) {
-      setError('Não foi possível enviar o email. Tente novamente.');
-      return;
+    try {
+      await sendPasswordResetEmail(getFirebaseAuth(), email, {
+        url: `${siteUrl}/reset-password`,
+        handleCodeInApp: true,
+      });
+    } catch {
+      // Never reveal whether the email exists — same message either way.
     }
+    setLoading(false);
     setSent(true);
   }
 
@@ -56,7 +54,6 @@ export default function ForgotPasswordPage() {
           <Label htmlFor="email">Email</Label>
           <Input id="email" name="email" type="email" autoComplete="email" required />
         </div>
-        <FieldError>{error}</FieldError>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? 'Enviando…' : 'Enviar link'}
         </Button>

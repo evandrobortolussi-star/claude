@@ -1,22 +1,20 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { parseMonthParam, shiftMonthParam } from '@/lib/month';
 import { getMonthTransactions, getMonthlyTrendByScope, summarizeByScope } from '@/lib/dashboard';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { MonthlyScopeChart } from '@/components/charts/MonthlyScopeChart';
 import { SCOPE_LABEL } from '@/lib/labels';
-import type { ExpenseScope } from '@/types/database';
+import type { ExpenseScope } from '@/types/firestore';
 
 export default async function ResponsaveisReportPage({ searchParams }: { searchParams: { month?: string } }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
   const { year, month, start, end } = parseMonthParam(searchParams.month);
 
   const [transactions, trend] = await Promise.all([
-    getMonthTransactions(supabase, user.householdId, start, end, {}),
-    getMonthlyTrendByScope(supabase, user.householdId, start, 6),
+    getMonthTransactions(user.householdId, start, end, {}),
+    getMonthlyTrendByScope(user.householdId, start, 6),
   ]);
 
   const byScope = summarizeByScope(transactions);

@@ -3,7 +3,8 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, FieldError } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
@@ -14,7 +15,6 @@ export default function RegisterPage() {
   const [mode, setMode] = useState<'create' | 'join'>('create');
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
-  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,43 +26,39 @@ export default function RegisterPage() {
     const password = String(formData.get('password'));
     const fullName = String(formData.get('name'));
 
-    const metadata: Record<string, string> =
-      mode === 'create'
-        ? { mode: 'create', household_name: String(formData.get('householdName')), full_name: fullName }
-        : { mode: 'join', invite_code: String(formData.get('inviteCode')).toUpperCase(), full_name: fullName };
+    try {
+      const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
+      const idToken = await credential.user.getIdToken();
 
-    const supabase = createClient();
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: metadata },
-    });
+      const signupResponse = await fetch('/api/auth/complete-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          mode === 'create'
+            ? { idToken, mode: 'create', householdName: String(formData.get('householdName')), fullName }
+            : { idToken, mode: 'join', inviteCode: String(formData.get('inviteCode')).toUpperCase(), fullName },
+        ),
+      });
 
-    setLoading(false);
-    if (signUpError) {
-      setError(translateError(signUpError.message));
-      return;
-    }
+      if (!signupResponse.ok) {
+        const body = (await signupResponse.json().catch(() => ({}))) as { error?: string };
+        setError(body.error ?? 'Não foi possível criar a conta.');
+        await credential.user.delete().catch(() => {});
+        setLoading(false);
+        return;
+      }
 
-    if (data.session) {
+      await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
       router.push('/dashboard');
       router.refresh();
-    } else {
-      setNeedsConfirmation(true);
+    } catch (err) {
+      setError(translateError(err instanceof Error ? err.message : ''));
+      setLoading(false);
     }
-  }
-
-  if (needsConfirmation) {
-    return (
-      <Card>
-        <p className="text-center text-sm text-slate-600">
-          Conta criada! Confirme seu email para poder entrar — enviamos um link de confirmação.
-        </p>
-        <Link href="/login" className="mt-4 block text-center text-sm font-medium text-brand-600">
-          Ir para o login
-        </Link>
-      </Card>
-    );
   }
 
   return (
@@ -136,10 +132,9 @@ export default function RegisterPage() {
   );
 }
 
-function translateError(message: string): string {
-  if (message.includes('already registered')) return 'Já existe uma conta com esse email.';
-  if (message.includes('Código de convite inválido')) return 'Código de convite inválido.';
-  if (message.includes('já possui dois membros')) return 'Esta família já possui dois membros.';
-  if (message.includes('Password should be')) return 'A senha precisa ter pelo menos 8 caracteres.';
+function translateError(code: string): string {
+  if (code.includes('email-already-in-use')) return 'Já existe uma conta com esse email.';
+  if (code.includes('weak-password')) return 'A senha precisa ter pelo menos 8 caracteres.';
+  if (code.includes('invalid-email')) return 'Email inválido.';
   return 'Não foi possível criar a conta. Tente novamente.';
 }

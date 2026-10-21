@@ -1,58 +1,48 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { FormEvent, Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, FieldError } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const searchParams = useSearchParams();
+  const oobCode = searchParams.get('oobCode');
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
-  useEffect(() => {
-    // The recovery link puts a token in the URL; the browser client
-    // exchanges it for a temporary session automatically on load.
-    const supabase = createClient();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-        setReady(true);
-      }
-    });
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setReady(true);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(undefined);
-    setLoading(true);
 
-    const password = String(new FormData(e.currentTarget).get('password'));
-    const supabase = createClient();
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-
-    setLoading(false);
-    if (updateError) {
-      setError('Não foi possível redefinir a senha. Solicite um novo link.');
+    if (!oobCode) {
+      setError('Link inválido ou expirado. Solicite um novo.');
       return;
     }
-    setDone(true);
-    setTimeout(() => router.push('/dashboard'), 1500);
+
+    setLoading(true);
+    const password = String(new FormData(e.currentTarget).get('password'));
+
+    try {
+      await verifyPasswordResetCode(getFirebaseAuth(), oobCode);
+      await confirmPasswordReset(getFirebaseAuth(), oobCode, password);
+      setDone(true);
+      setTimeout(() => router.push('/login'), 1500);
+    } catch {
+      setError('Não foi possível redefinir a senha. Solicite um novo link.');
+      setLoading(false);
+    }
   }
 
   if (done) {
     return (
       <Card>
-        <p className="text-center text-sm text-slate-600">Senha atualizada! Redirecionando…</p>
+        <p className="text-center text-sm text-slate-600">Senha atualizada! Redirecionando para o login…</p>
       </Card>
     );
   }
@@ -66,10 +56,18 @@ export default function ResetPasswordPage() {
           <Input id="password" name="password" type="password" minLength={8} required />
         </div>
         <FieldError>{error}</FieldError>
-        <Button type="submit" className="w-full" disabled={loading || !ready}>
-          {loading ? 'Salvando…' : ready ? 'Redefinir senha' : 'Abrindo link…'}
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? 'Salvando…' : 'Redefinir senha'}
         </Button>
       </form>
     </Card>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

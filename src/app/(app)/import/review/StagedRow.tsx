@@ -7,7 +7,7 @@ import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { cn } from '@/lib/cn';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import type { CategoryOption } from '@/lib/categories';
-import type { StagedStatus } from '@/types/database';
+import type { StagedStatus } from '@/types/firestore';
 import { SCOPE_LABEL } from '@/lib/labels';
 import { confirmStagedTransaction, ignoreStagedTransaction } from './actions';
 
@@ -19,19 +19,19 @@ export function StagedRow({
   staged: {
     id: string;
     description: string;
-    occurred_on: string;
-    amount_cents: number;
+    occurredOn: string;
+    amountCents: number;
     type: 'INCOME' | 'EXPENSE';
     status: StagedStatus;
-    category_id: string | null;
+    categoryId: string | null;
     scope: string;
-    possible_duplicate: boolean;
-    matched_rule_id: string | null;
+    possibleDuplicate: boolean;
+    matchedRuleId: string | null;
   };
   categories: CategoryOption[];
   duplicateHint: string | null;
 }) {
-  const [categoryId, setCategoryId] = useState(staged.category_id ?? '');
+  const [categoryId, setCategoryId] = useState(staged.categoryId ?? '');
   const [scope, setScope] = useState(staged.scope);
 
   const confirmAction = confirmStagedTransaction.bind(null, staged.id);
@@ -52,17 +52,17 @@ export function StagedRow({
     <div
       className={cn(
         'rounded-2xl border bg-white p-4 shadow-card',
-        staged.possible_duplicate ? 'border-amber-300' : 'border-slate-100',
+        staged.possibleDuplicate ? 'border-amber-300' : 'border-slate-100',
       )}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-slate-900">{staged.description}</p>
-          <p className="text-xs text-slate-500">{formatDate(staged.occurred_on)}</p>
+          <p className="text-xs text-slate-500">{formatDate(staged.occurredOn)}</p>
         </div>
         <span className={staged.type === 'INCOME' ? 'font-semibold text-income' : 'font-semibold text-expense'}>
           {staged.type === 'INCOME' ? '+' : '-'}
-          {formatCentsToBRL(staged.amount_cents)}
+          {formatCentsToBRL(staged.amountCents)}
         </span>
       </div>
 
@@ -75,7 +75,7 @@ export function StagedRow({
         >
           {staged.status === 'SUGGESTED' ? 'Sugestão automática' : 'Ainda não classificada'}
         </span>
-        {staged.possible_duplicate && (
+        {staged.possibleDuplicate && (
           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
             Possível duplicata
           </span>

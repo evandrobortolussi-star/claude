@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
 import { formatCentsToBRL } from '@/lib/format';
 import { parseMonthParam, shiftMonthParam } from '@/lib/month';
 import { getMonthlyTrend } from '@/lib/dashboard';
@@ -9,10 +8,9 @@ import { MonthlyEvolutionChart } from '@/components/charts/MonthlyEvolutionChart
 
 export default async function EvolucaoReportPage({ searchParams }: { searchParams: { month?: string } }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
   const { year, month, start } = parseMonthParam(searchParams.month);
 
-  const trend = await getMonthlyTrend(supabase, user.householdId, start, 6, {});
+  const trend = await getMonthlyTrend(user.householdId, start, 6, {});
   const monthLabel = start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   const monthsWithData = trend.filter((t) => t.incomeCents > 0 || t.expenseCents > 0);

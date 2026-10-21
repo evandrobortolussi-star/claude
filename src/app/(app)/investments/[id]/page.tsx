@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { getInvestment, listMovements, sumMovements } from '@/lib/firestore/investments';
+import { listActiveAccounts } from '@/lib/firestore/accounts';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -10,36 +11,16 @@ import { createInvestmentMovement, deleteInvestmentMovement } from '../actions';
 
 export default async function InvestmentDetailPage({ params }: { params: { id: string } }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
-  const [{ data: investment }, { data: movements }, { data: accounts }] = await Promise.all([
-    supabase
-      .from('investments')
-      .select('id, name, type, institution')
-      .eq('id', params.id)
-      .eq('household_id', user.householdId)
-      .single(),
-    supabase
-      .from('investment_movements')
-      .select('id, type, amount_cents, occurred_on, notes')
-      .eq('investment_id', params.id)
-      .is('deleted_at', null)
-      .order('occurred_on', { ascending: false }),
-    supabase
-      .from('accounts')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null),
-  ]);
-
+  const investment = await getInvestment(user.householdId, params.id);
   if (!investment) notFound();
 
-  const balance = (movements ?? []).reduce(
-    (sum, m) => sum + (m.type === 'CONTRIBUTION' ? m.amount_cents : -m.amount_cents),
-    0,
-  );
+  const [movements, accounts] = await Promise.all([
+    listMovements(user.householdId, params.id),
+    listActiveAccounts(user.householdId),
+  ]);
 
+  const balance = sumMovements(movements);
   const addMovement = createInvestmentMovement.bind(null, investment.id);
 
   return (
@@ -75,7 +56,7 @@ export default async function InvestmentDetailPage({ params }: { params: { id: s
               <Label htmlFor="accountId">Conta (opcional)</Label>
               <Select id="accountId" name="accountId" defaultValue="">
                 <option value="">—</option>
-                {accounts?.map((a) => (
+                {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
@@ -92,20 +73,18 @@ export default async function InvestmentDetailPage({ params }: { params: { id: s
       </Card>
 
       <div className="space-y-2">
-        {(!movements || movements.length === 0) && (
-          <p className="text-sm text-slate-400">Nenhum aporte ou resgate registrado ainda.</p>
-        )}
-        {movements?.map((m) => (
+        {movements.length === 0 && <p className="text-sm text-slate-400">Nenhum aporte ou resgate registrado ainda.</p>}
+        {movements.map((m) => (
           <Card key={m.id} className="flex items-center justify-between p-3">
             <div>
               <p className="text-sm font-medium text-slate-900">{m.type === 'CONTRIBUTION' ? 'Aporte' : 'Resgate'}</p>
-              <p className="text-xs text-slate-500">{formatDate(m.occurred_on)}</p>
+              <p className="text-xs text-slate-500">{formatDate(m.occurredOn)}</p>
               {m.notes && <p className="text-xs text-slate-400">{m.notes}</p>}
             </div>
             <div className="flex items-center gap-3">
               <span className={m.type === 'CONTRIBUTION' ? 'font-semibold text-income' : 'font-semibold text-expense'}>
                 {m.type === 'CONTRIBUTION' ? '+' : '-'}
-                {formatCentsToBRL(m.amount_cents)}
+                {formatCentsToBRL(m.amountCents)}
               </span>
               <form action={deleteInvestmentMovement.bind(null, investment.id, m.id)}>
                 <ConfirmSubmitButton confirmMessage="Excluir este movimento?">Excluir</ConfirmSubmitButton>

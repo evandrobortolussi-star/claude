@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global, read-only category catalog — seeded once via
+    // scripts/seed-categories.ts, never written through the client SDK.
+    match /categoryGroups/{groupId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /categories/{categoryId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Everything else — profiles, households, and every household-scoped
+    // collection under households/{id}/** (accounts, transactions, loans,
+    // etc.) — is only ever touched by the Admin SDK from trusted server
+    // code (Server Components, Server Actions and the two auth Route
+    // Handlers). The client SDK never reads or writes a document directly,
+    // the same trust boundary this app had with Supabase, where the browser
+    // client only ever called auth.*, never a table. Denying everything
+    // here is intentional defense in depth, not an oversight.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

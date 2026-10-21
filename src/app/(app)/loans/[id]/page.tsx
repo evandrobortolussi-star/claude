@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { getLoan, listLoanPayments } from '@/lib/firestore/loans';
+import { listActiveAccounts } from '@/lib/firestore/accounts';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -10,35 +11,17 @@ import { createLoanPayment, deleteLoanPayment } from '../actions';
 
 export default async function LoanDetailPage({ params }: { params: { id: string } }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
-  const [{ data: loan }, { data: payments }, { data: accounts }] = await Promise.all([
-    supabase
-      .from('loans')
-      .select(
-        'id, kind, name, institution, contracted_amount_cents, outstanding_balance_cents, installment_amount_cents, installments_total, installments_paid, interest_rate_monthly, due_day',
-      )
-      .eq('id', params.id)
-      .eq('household_id', user.householdId)
-      .single(),
-    supabase
-      .from('loan_payments')
-      .select('id, amount_cents, occurred_on, notes')
-      .eq('loan_id', params.id)
-      .is('deleted_at', null)
-      .order('occurred_on', { ascending: false }),
-    supabase
-      .from('accounts')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null),
-  ]);
-
+  const loan = await getLoan(user.householdId, params.id);
   if (!loan) notFound();
 
+  const [payments, accounts] = await Promise.all([
+    listLoanPayments(user.householdId, params.id),
+    listActiveAccounts(user.householdId),
+  ]);
+
   const addPayment = createLoanPayment.bind(null, loan.id);
-  const progressPct = Math.min(100, Math.round((loan.installments_paid / loan.installments_total) * 100));
+  const progressPct = Math.min(100, Math.round((loan.installmentsPaid / loan.installmentsTotal) * 100));
 
   return (
     <div className="space-y-6">
@@ -53,20 +36,20 @@ export default async function LoanDetailPage({ params }: { params: { id: string 
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-slate-500">Saldo devedor</p>
-            <p className="font-semibold text-expense">{formatCentsToBRL(loan.outstanding_balance_cents)}</p>
+            <p className="font-semibold text-expense">{formatCentsToBRL(loan.outstandingBalanceCents)}</p>
           </div>
           <div>
             <p className="text-slate-500">Valor contratado</p>
-            <p className="font-medium text-slate-900">{formatCentsToBRL(loan.contracted_amount_cents)}</p>
+            <p className="font-medium text-slate-900">{formatCentsToBRL(loan.contractedAmountCents)}</p>
           </div>
           <div>
             <p className="text-slate-500">Parcela</p>
-            <p className="font-medium text-slate-900">{formatCentsToBRL(loan.installment_amount_cents)}</p>
+            <p className="font-medium text-slate-900">{formatCentsToBRL(loan.installmentAmountCents)}</p>
           </div>
           <div>
             <p className="text-slate-500">Parcelas pagas</p>
             <p className="font-medium text-slate-900">
-              {loan.installments_paid}/{loan.installments_total}
+              {loan.installmentsPaid}/{loan.installmentsTotal}
             </p>
           </div>
         </div>
@@ -86,7 +69,7 @@ export default async function LoanDetailPage({ params }: { params: { id: string 
                 name="amount"
                 placeholder="0,00"
                 inputMode="decimal"
-                defaultValue={formatCentsToBRL(loan.installment_amount_cents)}
+                defaultValue={formatCentsToBRL(loan.installmentAmountCents)}
                 required
               />
             </div>
@@ -99,7 +82,7 @@ export default async function LoanDetailPage({ params }: { params: { id: string 
             <Label htmlFor="accountId">Conta (opcional)</Label>
             <Select id="accountId" name="accountId" defaultValue="">
               <option value="">—</option>
-              {accounts?.map((a) => (
+              {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
@@ -115,17 +98,15 @@ export default async function LoanDetailPage({ params }: { params: { id: string 
       </Card>
 
       <div className="space-y-2">
-        {(!payments || payments.length === 0) && (
-          <p className="text-sm text-slate-400">Nenhum pagamento registrado ainda.</p>
-        )}
-        {payments?.map((p) => (
+        {payments.length === 0 && <p className="text-sm text-slate-400">Nenhum pagamento registrado ainda.</p>}
+        {payments.map((p) => (
           <Card key={p.id} className="flex items-center justify-between p-3">
             <div>
-              <p className="text-sm font-medium text-slate-900">{formatDate(p.occurred_on)}</p>
+              <p className="text-sm font-medium text-slate-900">{formatDate(p.occurredOn)}</p>
               {p.notes && <p className="text-xs text-slate-400">{p.notes}</p>}
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-semibold text-expense">{formatCentsToBRL(p.amount_cents)}</span>
+              <span className="font-semibold text-expense">{formatCentsToBRL(p.amountCents)}</span>
               <form action={deleteLoanPayment.bind(null, loan.id, p.id)}>
                 <ConfirmSubmitButton confirmMessage="Excluir este pagamento? O saldo devedor será restaurado.">
                   Excluir

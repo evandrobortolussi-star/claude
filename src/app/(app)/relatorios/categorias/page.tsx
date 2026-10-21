@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
 import { getCategoryOptions } from '@/lib/categories';
 import { formatCentsToBRL } from '@/lib/format';
 import { parseMonthParam, shiftMonthParam } from '@/lib/month';
@@ -10,12 +9,11 @@ import { CategoryDonutChart, categoryPalette } from '@/components/charts/Categor
 
 export default async function CategoriasReportPage({ searchParams }: { searchParams: { month?: string } }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
   const { year, month, start, end } = parseMonthParam(searchParams.month);
 
   const [categories, transactions] = await Promise.all([
-    getCategoryOptions(supabase),
-    getMonthTransactions(supabase, user.householdId, start, end, {}),
+    getCategoryOptions(),
+    getMonthTransactions(user.householdId, start, end, {}),
   ]);
 
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
@@ -85,7 +83,7 @@ export default async function CategoriasReportPage({ searchParams }: { searchPar
                     className="flex items-center justify-between rounded-lg px-1 py-1 text-sm hover:bg-slate-50"
                   >
                     <span className="min-w-0 truncate text-slate-700">{t.description}</span>
-                    <span className="ml-2 shrink-0 font-medium text-expense">{formatCentsToBRL(t.amount_cents)}</span>
+                    <span className="ml-2 shrink-0 font-medium text-expense">{formatCentsToBRL(t.amountCents)}</span>
                   </Link>
                 </li>
               ))}

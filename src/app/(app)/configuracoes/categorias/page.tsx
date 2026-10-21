@@ -1,12 +1,10 @@
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
 import { getCategoryOptions } from '@/lib/categories';
 import { Card } from '@/components/ui/Card';
 
 export default async function CategoriasPage() {
   await requireCurrentUser();
-  const supabase = createClient();
-  const categories = await getCategoryOptions(supabase);
+  const categories = await getCategoryOptions();
 
   const groupsByKind = (kind: 'EXPENSE' | 'INCOME') => {
     const groups = new Map<string, string[]>();

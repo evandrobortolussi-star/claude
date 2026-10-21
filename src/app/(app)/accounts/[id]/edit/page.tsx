@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { getAccount } from '@/lib/firestore/accounts';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -10,13 +10,7 @@ import { ACCOUNT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
 
 export default async function EditAccountPage({ params }: { params: { id: string } }) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
-  const { data: account } = await supabase
-    .from('accounts')
-    .select('id, name, type, institution, opening_balance_cents')
-    .eq('id', params.id)
-    .eq('household_id', user.householdId)
-    .single();
+  const account = await getAccount(user.householdId, params.id);
 
   if (!account) notFound();
 
@@ -48,7 +42,7 @@ export default async function EditAccountPage({ params }: { params: { id: string
               <Input
                 id="openingBalance"
                 name="openingBalance"
-                defaultValue={formatCentsToBRL(account.opening_balance_cents)}
+                defaultValue={formatCentsToBRL(account.openingBalanceCents)}
                 inputMode="decimal"
               />
             </div>

@@ -1,4 +1,4 @@
-import type { ExpenseScope, TransactionType, AccountType, LoanKind, InvestmentType, InvestmentMovementType } from '@/types/database';
+import type { ExpenseScope, TransactionType, AccountType, LoanKind, InvestmentType, InvestmentMovementType } from '@/types/firestore';
 
 /** Shared vocabulary for scope/type/etc. — kept out of components so the
  * financial domain's wording lives in one place, not copy-pasted per file. */

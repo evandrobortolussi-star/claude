@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
 import { normalizeDescription } from '@/lib/normalize';
+import * as rulesDb from '@/lib/firestore/classificationRules';
 
 const ruleSchema = z.object({
   pattern: z.string().trim().min(2, 'O padrão precisa ter pelo menos 2 letras.'),
@@ -15,31 +15,18 @@ const ruleSchema = z.object({
 export async function updateRule(id: string, formData: FormData) {
   const user = await requireCurrentUser();
   const parsed = ruleSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase
-    .from('classification_rules')
-    .update({
-      pattern: normalizeDescription(parsed.pattern),
-      category_id: parsed.categoryId,
-      scope: parsed.scope,
-    })
-    .eq('id', id)
-    .eq('household_id', user.householdId);
-
-  if (error) throw new Error('Não foi possível salvar a regra.');
+  await rulesDb.updateRule(user.householdId, id, {
+    pattern: normalizeDescription(parsed.pattern),
+    categoryId: parsed.categoryId,
+    scope: parsed.scope,
+  });
 
   revalidatePath('/import/rules');
 }
 
 export async function deactivateRule(id: string) {
   const user = await requireCurrentUser();
-  const supabase = createClient();
-  await supabase
-    .from('classification_rules')
-    .update({ active: false, deleted_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('household_id', user.householdId);
-
+  await rulesDb.deactivateRule(user.householdId, id);
   revalidatePath('/import/rules');
 }

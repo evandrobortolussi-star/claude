@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listActiveInvestments, listAllMovements } from '@/lib/firestore/investments';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -10,27 +10,16 @@ import { INVESTMENT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
 
 export default async function InvestmentsPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
-  const [{ data: investments }, { data: movements }] = await Promise.all([
-    supabase
-      .from('investments')
-      .select('id, name, type, institution')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('investment_movements')
-      .select('investment_id, type, amount_cents')
-      .eq('household_id', user.householdId)
-      .is('deleted_at', null),
+  const [investments, movements] = await Promise.all([
+    listActiveInvestments(user.householdId),
+    listAllMovements(user.householdId),
   ]);
 
   const balanceByInvestment = new Map<string, number>();
-  for (const m of movements ?? []) {
-    const delta = m.type === 'CONTRIBUTION' ? m.amount_cents : -m.amount_cents;
-    balanceByInvestment.set(m.investment_id, (balanceByInvestment.get(m.investment_id) ?? 0) + delta);
+  for (const m of movements) {
+    const delta = m.type === 'CONTRIBUTION' ? m.amountCents : -m.amountCents;
+    balanceByInvestment.set(m.investmentId, (balanceByInvestment.get(m.investmentId) ?? 0) + delta);
   }
   const totalInvested = Array.from(balanceByInvestment.values()).reduce((s, v) => s + v, 0);
 
@@ -74,10 +63,8 @@ export default async function InvestmentsPage() {
       </Card>
 
       <div className="space-y-3">
-        {(!investments || investments.length === 0) && (
-          <p className="text-sm text-slate-400">Nenhum investimento cadastrado ainda.</p>
-        )}
-        {investments?.map((investment) => (
+        {investments.length === 0 && <p className="text-sm text-slate-400">Nenhum investimento cadastrado ainda.</p>}
+        {investments.map((investment) => (
           <Card key={investment.id} className="flex items-center justify-between">
             <Link href={`/investments/${investment.id}`} className="min-w-0 flex-1">
               <p className="font-medium text-slate-900">{investment.name}</p>

@@ -1,14 +1,15 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { signOut } from 'firebase/auth';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 
 export function TopBar({ householdName }: { householdName: string }) {
   const router = useRouter();
 
   async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await signOut(getFirebaseAuth());
+    await fetch('/api/session', { method: 'DELETE' });
     router.push('/login');
     router.refresh();
   }

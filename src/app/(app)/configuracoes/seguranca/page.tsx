@@ -15,10 +15,10 @@ export default function SegurancaPage() {
         <ul className="list-disc space-y-2 pl-4 text-sm text-slate-600">
           <li>Seus dados são visíveis apenas para você e seu parceiro(a) nesta família — nunca para outra família.</li>
           <li>
-            Todo acesso é verificado no banco de dados (Row Level Security do Postgres), não apenas no aplicativo —
-            mesmo que exista um bug na tela, a resposta do servidor já vem filtrada por família.
+            Todo acesso a dados passa pelo servidor autenticado, não apenas pela tela do aplicativo — mesmo que
+            exista um bug na interface, a resposta já vem filtrada por família.
           </li>
-          <li>Sua senha nunca é armazenada em texto puro — apenas um hash gerenciado pela autenticação do Supabase.</li>
+          <li>Sua senha nunca é armazenada em texto puro — apenas um hash gerenciado pela autenticação do Firebase.</li>
           <li>Senhas e credenciais de bancos nunca são solicitadas ou armazenadas neste app.</li>
           <li>Nenhuma chave secreta do servidor fica exposta no aplicativo que roda no seu navegador ou iPhone.</li>
           <li>Excluir uma movimentação nunca é definitivo por engano — é sempre uma ação explícita e reversível.</li>

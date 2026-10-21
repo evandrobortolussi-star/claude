@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
 import { parseBRLToCents } from '@/lib/format';
+import * as loansDb from '@/lib/firestore/loans';
 
 const loanSchema = z.object({
   kind: z.enum(['LOAN', 'FINANCING']),
@@ -22,34 +22,27 @@ const loanSchema = z.object({
 export async function createLoan(formData: FormData) {
   const user = await requireCurrentUser();
   const parsed = loanSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
-
   const contractedAmountCents = parseBRLToCents(parsed.contractedAmount);
 
-  const { error } = await supabase.from('loans').insert({
-    household_id: user.householdId,
+  await loansDb.createLoan(user.householdId, {
     kind: parsed.kind,
     name: parsed.name,
     institution: parsed.institution || null,
-    contracted_amount_cents: contractedAmountCents,
-    outstanding_balance_cents: contractedAmountCents,
-    installment_amount_cents: parseBRLToCents(parsed.installmentAmount),
-    installments_total: parsed.installmentsTotal,
-    interest_rate_monthly: parsed.interestRateMonthly ? Number(parsed.interestRateMonthly.replace(',', '.')) : null,
-    due_day: parsed.dueDay ? Number(parsed.dueDay) : null,
-    contracted_on: parsed.contractedOn,
+    contractedAmountCents,
+    installmentAmountCents: parseBRLToCents(parsed.installmentAmount),
+    installmentsTotal: parsed.installmentsTotal,
+    interestRateMonthly: parsed.interestRateMonthly ? Number(parsed.interestRateMonthly.replace(',', '.')) : null,
+    dueDay: parsed.dueDay ? Number(parsed.dueDay) : null,
+    contractedOn: parsed.contractedOn,
   });
-
-  if (error) throw new Error('Não foi possível criar o empréstimo/financiamento.');
 
   revalidatePath('/loans');
   redirect('/loans');
 }
 
 export async function archiveLoan(id: string) {
-  await requireCurrentUser();
-  const supabase = createClient();
-  await supabase.from('loans').update({ archived: true }).eq('id', id);
+  const user = await requireCurrentUser();
+  await loansDb.archiveLoan(user.householdId, id);
   revalidatePath('/loans');
 }
 
@@ -63,27 +56,21 @@ const paymentSchema = z.object({
 export async function createLoanPayment(loanId: string, formData: FormData) {
   const user = await requireCurrentUser();
   const parsed = paymentSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase.from('loan_payments').insert({
-    household_id: user.householdId,
-    loan_id: loanId,
-    amount_cents: parseBRLToCents(parsed.amount),
-    occurred_on: parsed.occurredOn,
-    account_id: parsed.accountId || null,
+  await loansDb.createLoanPayment(user.householdId, user.id, loanId, {
+    amountCents: parseBRLToCents(parsed.amount),
+    occurredOn: parsed.occurredOn,
+    accountId: parsed.accountId || null,
     notes: parsed.notes || null,
   });
-
-  if (error) throw new Error('Não foi possível registrar o pagamento.');
 
   revalidatePath(`/loans/${loanId}`);
   revalidatePath('/loans');
 }
 
 export async function deleteLoanPayment(loanId: string, paymentId: string) {
-  await requireCurrentUser();
-  const supabase = createClient();
-  await supabase.from('loan_payments').update({ deleted_at: new Date().toISOString() }).eq('id', paymentId);
+  const user = await requireCurrentUser();
+  await loansDb.softDeleteLoanPayment(user.householdId, loanId, paymentId);
   revalidatePath(`/loans/${loanId}`);
   revalidatePath('/loans');
 }

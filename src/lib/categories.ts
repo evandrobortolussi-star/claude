@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database, TransactionType } from '@/types/database';
+import { getAdminDb } from '@/lib/firebase/admin';
+import type { CategoryDoc, CategoryGroupDoc, TransactionType } from '@/types/firestore';
 
 export type CategoryOption = {
   id: string;
@@ -8,18 +8,28 @@ export type CategoryOption = {
   groupName: string;
 };
 
-export async function getCategoryOptions(supabase: SupabaseClient<Database>): Promise<CategoryOption[]> {
-  const [{ data: groups }, { data: categories }] = await Promise.all([
-    supabase.from('category_groups').select('id, name, sort_order').order('sort_order'),
-    supabase.from('categories').select('id, group_id, name, kind, sort_order').order('sort_order'),
+export async function getCategoryOptions(): Promise<CategoryOption[]> {
+  const db = getAdminDb();
+  const [groupsSnapshot, categoriesSnapshot] = await Promise.all([
+    db.collection('categoryGroups').get(),
+    db.collection('categories').get(),
   ]);
 
-  const groupNameById = new Map((groups ?? []).map((g) => [g.id, g.name]));
+  const groupNameById = new Map(
+    groupsSnapshot.docs.map((doc) => [doc.id, (doc.data() as CategoryGroupDoc).name]),
+  );
 
-  return (categories ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    kind: c.kind,
-    groupName: groupNameById.get(c.group_id) ?? '',
-  }));
+  return categoriesSnapshot.docs
+    .map((doc) => {
+      const data = doc.data() as CategoryDoc;
+      return {
+        id: doc.id,
+        name: data.name,
+        kind: data.kind,
+        sortOrder: data.sortOrder,
+        groupName: groupNameById.get(data.groupId) ?? '',
+      };
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map(({ id, name, kind, groupName }) => ({ id, name, kind, groupName }));
 }

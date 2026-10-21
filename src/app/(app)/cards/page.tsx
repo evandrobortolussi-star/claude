@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listActiveCards } from '@/lib/firestore/cards';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -9,14 +9,7 @@ import { createCard, archiveCard } from './actions';
 
 export default async function CardsPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
-  const { data: cards } = await supabase
-    .from('credit_cards')
-    .select('id, name, brand, closing_day, due_day, limit_cents')
-    .eq('household_id', user.householdId)
-    .eq('archived', false)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true });
+  const cards = await listActiveCards(user.householdId);
 
   return (
     <div className="space-y-6">
@@ -55,16 +48,16 @@ export default async function CardsPage() {
       </Card>
 
       <div className="space-y-3">
-        {(!cards || cards.length === 0) && <p className="text-sm text-slate-400">Nenhum cartão cadastrado ainda.</p>}
-        {cards?.map((card) => (
+        {cards.length === 0 && <p className="text-sm text-slate-400">Nenhum cartão cadastrado ainda.</p>}
+        {cards.map((card) => (
           <Card key={card.id} className="flex items-center justify-between">
             <Link href={`/cards/${card.id}`} className="min-w-0 flex-1">
               <p className="font-medium text-slate-900">{card.name}</p>
               <p className="text-xs text-slate-500">
-                {card.brand ? `${card.brand} · ` : ''}Fecha dia {card.closing_day}, vence dia {card.due_day}
+                {card.brand ? `${card.brand} · ` : ''}Fecha dia {card.closingDay}, vence dia {card.dueDay}
               </p>
-              {card.limit_cents != null && (
-                <p className="mt-1 text-sm text-slate-600">Limite: {formatCentsToBRL(card.limit_cents)}</p>
+              {card.limitCents != null && (
+                <p className="mt-1 text-sm text-slate-600">Limite: {formatCentsToBRL(card.limitCents)}</p>
               )}
             </Link>
             <div className="flex flex-col items-end gap-2">

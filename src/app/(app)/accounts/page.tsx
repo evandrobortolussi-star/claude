@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listActiveAccounts } from '@/lib/firestore/accounts';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -10,14 +10,7 @@ import { ACCOUNT_TYPE_LABEL as TYPE_LABEL } from '@/lib/labels';
 
 export default async function AccountsPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
-  const { data: accounts } = await supabase
-    .from('accounts')
-    .select('id, name, type, institution, opening_balance_cents')
-    .eq('household_id', user.householdId)
-    .eq('archived', false)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true });
+  const accounts = await listActiveAccounts(user.householdId);
 
   return (
     <div className="space-y-6">
@@ -58,10 +51,8 @@ export default async function AccountsPage() {
       </Card>
 
       <div className="space-y-3">
-        {(!accounts || accounts.length === 0) && (
-          <p className="text-sm text-slate-400">Nenhuma conta cadastrada ainda.</p>
-        )}
-        {accounts?.map((account) => (
+        {accounts.length === 0 && <p className="text-sm text-slate-400">Nenhuma conta cadastrada ainda.</p>}
+        {accounts.map((account) => (
           <Card key={account.id} className="flex items-center justify-between">
             <div>
               <p className="font-medium text-slate-900">{account.name}</p>
@@ -69,7 +60,7 @@ export default async function AccountsPage() {
                 {TYPE_LABEL[account.type]} {account.institution ? `· ${account.institution}` : ''}
               </p>
               <p className="mt-1 text-sm text-slate-600">
-                Saldo inicial: {formatCentsToBRL(account.opening_balance_cents)}
+                Saldo inicial: {formatCentsToBRL(account.openingBalanceCents)}
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">

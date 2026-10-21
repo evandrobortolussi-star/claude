@@ -1,35 +1,21 @@
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
 import { getCategoryOptions } from '@/lib/categories';
+import { getTransactionsByIds, listPendingStaged } from '@/lib/firestore/importBatches';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import { StagedRow } from './StagedRow';
 
 export default async function ReviewImportsPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
-  const [{ data: staged }, categories] = await Promise.all([
-    supabase
-      .from('import_staged_transactions')
-      .select(
-        'id, description, occurred_on, amount_cents, type, status, category_id, scope, possible_duplicate, duplicate_of_transaction_id, matched_rule_id',
-      )
-      .eq('household_id', user.householdId)
-      .in('status', ['PENDING', 'SUGGESTED'])
-      .order('occurred_on', { ascending: false }),
-    getCategoryOptions(supabase),
+  const [staged, categories] = await Promise.all([
+    listPendingStaged(user.householdId),
+    getCategoryOptions(),
   ]);
 
   const duplicateIds = Array.from(
-    new Set((staged ?? []).map((s) => s.duplicate_of_transaction_id).filter((id): id is string => !!id)),
+    new Set(staged.map((s) => s.duplicateOfTransactionId).filter((id): id is string => !!id)),
   );
-
-  const { data: duplicateTransactions } =
-    duplicateIds.length > 0
-      ? await supabase.from('transactions').select('id, description, occurred_on, amount_cents').in('id', duplicateIds)
-      : { data: [] };
-
-  const duplicateById = new Map((duplicateTransactions ?? []).map((t) => [t.id, t]));
+  const duplicateById = await getTransactionsByIds(user.householdId, duplicateIds);
 
   return (
     <div className="space-y-6">
@@ -39,14 +25,10 @@ export default async function ReviewImportsPage() {
       </div>
 
       <div className="space-y-3">
-        {(!staged || staged.length === 0) && (
-          <p className="text-sm text-slate-400">Nenhuma movimentação pendente de revisão.</p>
-        )}
-        {staged?.map((s) => {
-          const dup = s.duplicate_of_transaction_id ? duplicateById.get(s.duplicate_of_transaction_id) : null;
-          const duplicateHint = dup
-            ? `${dup.description} em ${formatDate(dup.occurred_on)} (${formatCentsToBRL(dup.amount_cents)})`
-            : null;
+        {staged.length === 0 && <p className="text-sm text-slate-400">Nenhuma movimentação pendente de revisão.</p>}
+        {staged.map((s) => {
+          const dup = s.duplicateOfTransactionId ? duplicateById.get(s.duplicateOfTransactionId) : null;
+          const duplicateHint = dup ? `${dup.description} em ${formatDate(dup.occurredOn)} (${formatCentsToBRL(dup.amountCents)})` : null;
           return <StagedRow key={s.id} staged={s} categories={categories} duplicateHint={duplicateHint} />;
         })}
       </div>

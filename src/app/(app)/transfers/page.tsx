@@ -1,5 +1,6 @@
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listActiveAccounts } from '@/lib/firestore/accounts';
+import { listTransfers } from '@/lib/firestore/transfers';
 import { formatCentsToBRL, formatDate } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -9,25 +10,13 @@ import { createTransfer, deleteTransfer } from './actions';
 
 export default async function TransfersPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
 
-  const [{ data: accounts }, { data: transfers }] = await Promise.all([
-    supabase
-      .from('accounts')
-      .select('id, name')
-      .eq('household_id', user.householdId)
-      .eq('archived', false)
-      .is('deleted_at', null)
-      .order('name'),
-    supabase
-      .from('transfers')
-      .select('id, from_account_id, to_account_id, amount_cents, occurred_on, notes')
-      .eq('household_id', user.householdId)
-      .is('deleted_at', null)
-      .order('occurred_on', { ascending: false }),
+  const [accounts, transfers] = await Promise.all([
+    listActiveAccounts(user.householdId),
+    listTransfers(user.householdId),
   ]);
 
-  const accountNameById = new Map((accounts ?? []).map((a) => [a.id, a.name]));
+  const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
 
   return (
     <div className="space-y-6">
@@ -48,7 +37,7 @@ export default async function TransfersPage() {
                 <option value="" disabled>
                   Selecione
                 </option>
-                {accounts?.map((a) => (
+                {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
@@ -61,7 +50,7 @@ export default async function TransfersPage() {
                 <option value="" disabled>
                   Selecione
                 </option>
-                {accounts?.map((a) => (
+                {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
@@ -88,20 +77,18 @@ export default async function TransfersPage() {
       </Card>
 
       <div className="space-y-2">
-        {(!transfers || transfers.length === 0) && (
-          <p className="text-sm text-slate-400">Nenhuma transferência registrada ainda.</p>
-        )}
-        {transfers?.map((t) => (
+        {transfers.length === 0 && <p className="text-sm text-slate-400">Nenhuma transferência registrada ainda.</p>}
+        {transfers.map((t) => (
           <Card key={t.id} className="flex items-center justify-between p-3">
             <div>
               <p className="text-sm font-medium text-slate-900">
-                {accountNameById.get(t.from_account_id) ?? '—'} → {accountNameById.get(t.to_account_id) ?? '—'}
+                {accountNameById.get(t.fromAccountId) ?? '—'} → {accountNameById.get(t.toAccountId) ?? '—'}
               </p>
-              <p className="text-xs text-slate-500">{formatDate(t.occurred_on)}</p>
+              <p className="text-xs text-slate-500">{formatDate(t.occurredOn)}</p>
               {t.notes && <p className="text-xs text-slate-400">{t.notes}</p>}
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-semibold text-slate-900">{formatCentsToBRL(t.amount_cents)}</span>
+              <span className="font-semibold text-slate-900">{formatCentsToBRL(t.amountCents)}</span>
               <form action={deleteTransfer.bind(null, t.id)}>
                 <ConfirmSubmitButton confirmMessage="Excluir esta transferência?">Excluir</ConfirmSubmitButton>
               </form>

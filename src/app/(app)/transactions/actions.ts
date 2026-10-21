@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
-import { parseBRLToCents, addMonthsClamped } from '@/lib/format';
+import { parseBRLToCents } from '@/lib/format';
+import * as transactionsDb from '@/lib/firestore/transactions';
+import { createRecurringTransaction, generateDueRecurringTransactions } from '@/lib/firestore/recurringTransactions';
 
 const baseSchema = z.object({
   type: z.enum(['INCOME', 'EXPENSE']),
@@ -28,14 +28,14 @@ type ParsedFields = Pick<
   'type' | 'description' | 'notes' | 'categoryId' | 'accountId' | 'cardId' | 'scope'
 >;
 
-function commonFields(parsed: ParsedFields) {
+function commonFields(parsed: ParsedFields): transactionsDb.TransactionCommon {
   return {
     type: parsed.type,
     description: parsed.description,
     notes: parsed.notes || null,
-    category_id: parsed.categoryId || null,
-    account_id: parsed.accountId || null,
-    card_id: parsed.cardId || null,
+    categoryId: parsed.categoryId || null,
+    accountId: parsed.accountId || null,
+    cardId: parsed.cardId || null,
     scope: parsed.scope,
   };
 }
@@ -46,48 +46,34 @@ export async function createTransaction(formData: FormData) {
   const totalCents = parseBRLToCents(parsed.amount);
   if (totalCents <= 0) throw new Error('O valor precisa ser maior que zero.');
 
-  const supabase = createClient();
-
   if (parsed.repetition === 'recurring') {
     const dayOfMonth = Number(parsed.occurredOn.split('-')[2]);
-    const { error } = await supabase.from('recurring_transactions').insert({
-      ...commonFields(parsed),
-      household_id: user.householdId,
-      amount_cents: totalCents,
-      day_of_month: dayOfMonth,
-      start_date: parsed.occurredOn,
-      end_date: parsed.endDate || null,
-    });
-    if (error) throw new Error('Não foi possível criar a recorrência.');
-
+    await createRecurringTransaction(
+      user.householdId,
+      user.id,
+      commonFields(parsed),
+      totalCents,
+      dayOfMonth,
+      parsed.occurredOn,
+      parsed.endDate || null,
+    );
     // Materialize the first (and any already-due) occurrence right away.
-    await supabase.rpc('generate_due_recurring_transactions', { p_household_id: user.householdId });
+    await generateDueRecurringTransactions(user.householdId);
   } else if (parsed.repetition === 'installments' && parsed.installments && parsed.installments >= 2) {
-    const n = parsed.installments;
-    const base = Math.floor(totalCents / n);
-    const remainder = totalCents - base * n;
-    const groupId = randomUUID();
-
-    const rows = Array.from({ length: n }, (_, i) => ({
-      ...commonFields(parsed),
-      household_id: user.householdId,
-      amount_cents: base + (i === n - 1 ? remainder : 0),
-      occurred_on: addMonthsClamped(parsed.occurredOn, i),
-      installment_group_id: groupId,
-      installment_number: i + 1,
-      installment_total: n,
-    }));
-
-    const { error } = await supabase.from('transactions').insert(rows);
-    if (error) throw new Error('Não foi possível criar o parcelamento.');
+    await transactionsDb.createInstallmentTransactions(
+      user.householdId,
+      user.id,
+      commonFields(parsed),
+      totalCents,
+      parsed.occurredOn,
+      parsed.installments,
+    );
   } else {
-    const { error } = await supabase.from('transactions').insert({
+    await transactionsDb.createSingleTransaction(user.householdId, user.id, {
       ...commonFields(parsed),
-      household_id: user.householdId,
-      amount_cents: totalCents,
-      occurred_on: parsed.occurredOn,
+      amountCents: totalCents,
+      occurredOn: parsed.occurredOn,
     });
-    if (error) throw new Error('Não foi possível criar o lançamento.');
   }
 
   revalidatePath('/transactions');
@@ -108,20 +94,14 @@ const editSchema = baseSchema.pick({
 });
 
 export async function updateTransaction(id: string, formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const parsed = editSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase
-    .from('transactions')
-    .update({
-      ...commonFields(parsed),
-      amount_cents: parseBRLToCents(parsed.amount),
-      occurred_on: parsed.occurredOn,
-    })
-    .eq('id', id);
-
-  if (error) throw new Error('Não foi possível salvar o lançamento.');
+  await transactionsDb.updateTransaction(user.householdId, id, {
+    ...commonFields(parsed),
+    amountCents: parseBRLToCents(parsed.amount),
+    occurredOn: parsed.occurredOn,
+  });
 
   revalidatePath('/transactions');
   revalidatePath('/dashboard');
@@ -129,9 +109,8 @@ export async function updateTransaction(id: string, formData: FormData) {
 }
 
 export async function deleteTransaction(id: string) {
-  await requireCurrentUser();
-  const supabase = createClient();
-  await supabase.from('transactions').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const user = await requireCurrentUser();
+  await transactionsDb.softDeleteTransaction(user.householdId, id);
   revalidatePath('/transactions');
   revalidatePath('/dashboard');
 }

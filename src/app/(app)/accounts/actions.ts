@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
 import { parseBRLToCents } from '@/lib/format';
+import * as accountsDb from '@/lib/firestore/accounts';
 
 const accountSchema = z.object({
   name: z.string().trim().min(1, 'Informe um nome.'),
@@ -17,46 +17,35 @@ const accountSchema = z.object({
 export async function createAccount(formData: FormData) {
   const user = await requireCurrentUser();
   const parsed = accountSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase.from('accounts').insert({
-    household_id: user.householdId,
+  await accountsDb.createAccount(user.householdId, {
     name: parsed.name,
     type: parsed.type,
     institution: parsed.institution || null,
-    opening_balance_cents: parseBRLToCents(parsed.openingBalance ?? '0'),
+    openingBalanceCents: parseBRLToCents(parsed.openingBalance ?? '0'),
   });
-
-  if (error) throw new Error('Não foi possível criar a conta.');
 
   revalidatePath('/accounts');
   redirect('/accounts');
 }
 
 export async function updateAccount(id: string, formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const parsed = accountSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase
-    .from('accounts')
-    .update({
-      name: parsed.name,
-      type: parsed.type,
-      institution: parsed.institution || null,
-      opening_balance_cents: parseBRLToCents(parsed.openingBalance ?? '0'),
-    })
-    .eq('id', id);
-
-  if (error) throw new Error('Não foi possível salvar a conta.');
+  await accountsDb.updateAccount(user.householdId, id, {
+    name: parsed.name,
+    type: parsed.type,
+    institution: parsed.institution || null,
+    openingBalanceCents: parseBRLToCents(parsed.openingBalance ?? '0'),
+  });
 
   revalidatePath('/accounts');
   redirect('/accounts');
 }
 
 export async function archiveAccount(id: string) {
-  await requireCurrentUser();
-  const supabase = createClient();
-  await supabase.from('accounts').update({ archived: true }).eq('id', id);
+  const user = await requireCurrentUser();
+  await accountsDb.archiveAccount(user.householdId, id);
   revalidatePath('/accounts');
 }

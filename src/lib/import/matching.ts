@@ -1,11 +1,11 @@
 import { daysBetweenISO } from '@/lib/format';
-import type { ExpenseScope, TransactionType } from '@/types/database';
+import type { ExpenseScope, TransactionType } from '@/types/firestore';
 import type { ParsedStatementRow } from './types';
 
 export type RuleForMatching = {
   id: string;
   pattern: string;
-  category_id: string;
+  categoryId: string;
   scope: ExpenseScope;
 };
 
@@ -24,7 +24,7 @@ export function findBestRule(
 ): RuleForMatching | null {
   let best: RuleForMatching | null = null;
   for (const rule of rules) {
-    if (categoryKindById.get(rule.category_id) !== type) continue;
+    if (categoryKindById.get(rule.categoryId) !== type) continue;
     const matches =
       normalizedDescription.includes(rule.pattern) || rule.pattern.includes(normalizedDescription);
     if (!matches) continue;
@@ -35,9 +35,9 @@ export function findBestRule(
 
 export type ExistingMovementRef = {
   id?: string;
-  occurred_on: string;
-  amount_cents: number;
-  external_id: string | null;
+  occurredOn: string;
+  amountCents: number;
+  externalId: string | null;
 };
 
 const DUPLICATE_DATE_WINDOW_DAYS = 2;
@@ -51,14 +51,14 @@ export function checkPossibleDuplicate(
   existing: ExistingMovementRef[],
 ): { possible: boolean; matchId: string | null } {
   if (row.externalId) {
-    const exact = existing.find((e) => e.external_id && e.external_id === row.externalId);
+    const exact = existing.find((e) => e.externalId && e.externalId === row.externalId);
     if (exact) return { possible: true, matchId: exact.id ?? null };
   }
 
   const approximate = existing.find(
     (e) =>
-      e.amount_cents === row.amountCents &&
-      Math.abs(daysBetweenISO(row.occurredOn, e.occurred_on)) <= DUPLICATE_DATE_WINDOW_DAYS,
+      e.amountCents === row.amountCents &&
+      Math.abs(daysBetweenISO(row.occurredOn, e.occurredOn)) <= DUPLICATE_DATE_WINDOW_DAYS,
   );
   if (approximate) return { possible: true, matchId: approximate.id ?? null };
 

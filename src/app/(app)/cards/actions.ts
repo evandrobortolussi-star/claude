@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { requireCurrentUser } from '@/lib/session';
 import { parseBRLToCents } from '@/lib/format';
+import * as cardsDb from '@/lib/firestore/cards';
 
 const cardSchema = z.object({
   name: z.string().trim().min(1, 'Informe um nome.'),
@@ -18,49 +18,38 @@ const cardSchema = z.object({
 export async function createCard(formData: FormData) {
   const user = await requireCurrentUser();
   const parsed = cardSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase.from('credit_cards').insert({
-    household_id: user.householdId,
+  await cardsDb.createCard(user.householdId, {
     name: parsed.name,
     brand: parsed.brand || null,
-    closing_day: parsed.closingDay,
-    due_day: parsed.dueDay,
-    limit_cents: parsed.limit ? parseBRLToCents(parsed.limit) : null,
+    closingDay: parsed.closingDay,
+    dueDay: parsed.dueDay,
+    limitCents: parsed.limit ? parseBRLToCents(parsed.limit) : null,
   });
-
-  if (error) throw new Error('Não foi possível criar o cartão.');
 
   revalidatePath('/cards');
   redirect('/cards');
 }
 
 export async function updateCard(id: string, formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const parsed = cardSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase
-    .from('credit_cards')
-    .update({
-      name: parsed.name,
-      brand: parsed.brand || null,
-      closing_day: parsed.closingDay,
-      due_day: parsed.dueDay,
-      limit_cents: parsed.limit ? parseBRLToCents(parsed.limit) : null,
-    })
-    .eq('id', id);
-
-  if (error) throw new Error('Não foi possível salvar o cartão.');
+  await cardsDb.updateCard(user.householdId, id, {
+    name: parsed.name,
+    brand: parsed.brand || null,
+    closingDay: parsed.closingDay,
+    dueDay: parsed.dueDay,
+    limitCents: parsed.limit ? parseBRLToCents(parsed.limit) : null,
+  });
 
   revalidatePath('/cards');
   redirect('/cards');
 }
 
 export async function archiveCard(id: string) {
-  await requireCurrentUser();
-  const supabase = createClient();
-  await supabase.from('credit_cards').update({ archived: true }).eq('id', id);
+  const user = await requireCurrentUser();
+  await cardsDb.archiveCard(user.householdId, id);
   revalidatePath('/cards');
 }
 
@@ -75,26 +64,21 @@ const paymentSchema = z.object({
 export async function createCardPayment(cardId: string, formData: FormData) {
   const user = await requireCurrentUser();
   const parsed = paymentSchema.parse(Object.fromEntries(formData));
-  const supabase = createClient();
 
-  const { error } = await supabase.from('card_payments').insert({
-    household_id: user.householdId,
-    card_id: cardId,
-    account_id: parsed.accountId,
-    amount_cents: parseBRLToCents(parsed.amount),
-    occurred_on: parsed.occurredOn,
-    invoice_month: `${parsed.invoiceMonth}-01`,
+  await cardsDb.createCardPayment(user.householdId, user.id, {
+    cardId,
+    accountId: parsed.accountId,
+    amountCents: parseBRLToCents(parsed.amount),
+    occurredOn: parsed.occurredOn,
+    invoiceMonth: `${parsed.invoiceMonth}-01`,
     notes: parsed.notes || null,
   });
-
-  if (error) throw new Error('Não foi possível registrar o pagamento da fatura.');
 
   revalidatePath(`/cards/${cardId}`);
 }
 
 export async function deleteCardPayment(cardId: string, paymentId: string) {
-  await requireCurrentUser();
-  const supabase = createClient();
-  await supabase.from('card_payments').update({ deleted_at: new Date().toISOString() }).eq('id', paymentId);
+  const user = await requireCurrentUser();
+  await cardsDb.softDeleteCardPayment(user.householdId, paymentId);
   revalidatePath(`/cards/${cardId}`);
 }

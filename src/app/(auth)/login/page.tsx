@@ -3,7 +3,8 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/Button';
 import { Input, Label, FieldError } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
@@ -19,19 +20,25 @@ export default function LoginPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: String(formData.get('email')),
-      password: String(formData.get('password')),
-    });
 
-    setLoading(false);
-    if (signInError) {
+    try {
+      const credential = await signInWithEmailAndPassword(
+        getFirebaseAuth(),
+        String(formData.get('email')),
+        String(formData.get('password')),
+      );
+      const idToken = await credential.user.getIdToken();
+      await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+      router.push('/dashboard');
+      router.refresh();
+    } catch {
       setError('Email ou senha inválidos.');
-      return;
+      setLoading(false);
     }
-    router.push('/dashboard');
-    router.refresh();
   }
 
   return (

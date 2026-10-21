@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireCurrentUser } from '@/lib/session';
-import { createClient } from '@/lib/supabase/server';
+import { listActiveLoans } from '@/lib/firestore/loans';
 import { formatCentsToBRL } from '@/lib/format';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { SubmitButton } from '@/components/ui/SubmitButton';
@@ -9,18 +9,9 @@ import { createLoan, archiveLoan } from './actions';
 
 export default async function LoansPage() {
   const user = await requireCurrentUser();
-  const supabase = createClient();
-  const { data: loans } = await supabase
-    .from('loans')
-    .select(
-      'id, kind, name, institution, outstanding_balance_cents, contracted_amount_cents, installments_total, installments_paid',
-    )
-    .eq('household_id', user.householdId)
-    .eq('archived', false)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true });
+  const loans = await listActiveLoans(user.householdId);
 
-  const totalOutstanding = (loans ?? []).reduce((s, l) => s + l.outstanding_balance_cents, 0);
+  const totalOutstanding = loans.reduce((s, l) => s + l.outstandingBalanceCents, 0);
 
   return (
     <div className="space-y-6">
@@ -89,8 +80,8 @@ export default async function LoansPage() {
       </Card>
 
       <div className="space-y-3">
-        {(!loans || loans.length === 0) && <p className="text-sm text-slate-400">Nenhum empréstimo cadastrado ainda.</p>}
-        {loans?.map((loan) => (
+        {loans.length === 0 && <p className="text-sm text-slate-400">Nenhum empréstimo cadastrado ainda.</p>}
+        {loans.map((loan) => (
           <Card key={loan.id} className="flex items-center justify-between">
             <Link href={`/loans/${loan.id}`} className="min-w-0 flex-1">
               <p className="font-medium text-slate-900">{loan.name}</p>
@@ -98,9 +89,9 @@ export default async function LoansPage() {
                 {loan.kind === 'LOAN' ? 'Empréstimo' : 'Financiamento'} · {loan.institution}
               </p>
               <p className="text-xs text-slate-400">
-                {loan.installments_paid}/{loan.installments_total} parcelas pagas
+                {loan.installmentsPaid}/{loan.installmentsTotal} parcelas pagas
               </p>
-              <p className="mt-1 text-sm font-semibold text-expense">{formatCentsToBRL(loan.outstanding_balance_cents)}</p>
+              <p className="mt-1 text-sm font-semibold text-expense">{formatCentsToBRL(loan.outstandingBalanceCents)}</p>
             </Link>
             <form action={archiveLoan.bind(null, loan.id)}>
               <button type="submit" className="text-xs font-medium text-slate-400 hover:text-red-500">

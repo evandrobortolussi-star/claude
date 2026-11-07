@@ -3,7 +3,7 @@ import { requireCurrentUser } from '@/lib/session';
 import { listActiveAccounts } from '@/lib/firestore/accounts';
 import { listActiveCards } from '@/lib/firestore/cards';
 import { getCategoryOptions } from '@/lib/categories';
-import { formatCentsToBRL, formatDate } from '@/lib/format';
+import { formatCentsToBRL, formatCentsToBRLCompact, formatDate } from '@/lib/format';
 import { parseMonthParam, shiftMonthParam } from '@/lib/month';
 import {
   getMonthTransactions,
@@ -65,16 +65,22 @@ export default async function DashboardPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Início</h1>
+        <h1 className="font-display text-lg font-semibold text-slate-900">Início</h1>
         <p className="text-sm text-slate-500">Sua situação financeira em poucos segundos.</p>
       </div>
 
       <div className="flex items-center justify-between">
-        <Link href={dashboardHref(searchParams, { month: shiftMonthParam(year, month, -1) })} className="p-2 text-slate-400">
+        <Link
+          href={dashboardHref(searchParams, { month: shiftMonthParam(year, month, -1) })}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ‹
         </Link>
         <p className="text-sm font-medium capitalize text-slate-900">{monthLabel}</p>
-        <Link href={dashboardHref(searchParams, { month: shiftMonthParam(year, month, 1) })} className="p-2 text-slate-400">
+        <Link
+          href={dashboardHref(searchParams, { month: shiftMonthParam(year, month, 1) })}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ›
         </Link>
       </div>
@@ -111,22 +117,22 @@ export default async function DashboardPage({
         </Link>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
-        <Card className="p-3 text-center">
-          <p className="text-[11px] text-slate-500">Recebido</p>
-          <p className="mt-1 text-sm font-semibold text-income">{formatCentsToBRL(income)}</p>
-        </Card>
-        <Card className="p-3 text-center">
-          <p className="text-[11px] text-slate-500">Gasto</p>
-          <p className="mt-1 text-sm font-semibold text-expense">{formatCentsToBRL(expense)}</p>
-        </Card>
-        <Card className="p-3 text-center">
-          <p className="text-[11px] text-slate-500">Saldo</p>
-          <p className={`mt-1 text-sm font-semibold ${balance >= 0 ? 'text-income' : 'text-expense'}`}>
-            {formatCentsToBRL(balance)}
-          </p>
-        </Card>
-      </div>
+      <Card className="border-brand-700 bg-brand-700 text-cream">
+        <span className="label-caps text-cream/60">Saldo do mês</span>
+        <p className="mt-2 font-display text-[40px] font-medium leading-none tracking-tight">
+          {formatCentsToBRLCompact(balance)}
+        </p>
+        <div className="mt-5 grid grid-cols-2 gap-3 border-t border-cream/15 pt-4">
+          <div>
+            <span className="label-caps text-cream/50">Recebido</span>
+            <p className="mt-1 font-mono text-lg">{formatCentsToBRLCompact(income)}</p>
+          </div>
+          <div className="text-right">
+            <span className="label-caps text-cream/50">Gasto</span>
+            <p className="mt-1 font-mono text-lg text-expense">{formatCentsToBRLCompact(expense)}</p>
+          </div>
+        </div>
+      </Card>
 
       <Card>
         <CardTitle className="mb-3">Gastos por responsável</CardTitle>
@@ -138,7 +144,7 @@ export default async function DashboardPage({
               className={`rounded-xl p-2.5 text-center ${searchParams.scope === scope ? 'bg-brand-50 ring-1 ring-brand-200' : 'bg-slate-50 hover:bg-slate-100'}`}
             >
               <p className="text-[11px] text-slate-500">{SCOPE_LABEL[scope]}</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">{formatCentsToBRL(byScope[scope])}</p>
+              <p className="mt-1 font-mono text-sm font-semibold text-slate-900">{formatCentsToBRL(byScope[scope])}</p>
             </Link>
           ))}
         </div>

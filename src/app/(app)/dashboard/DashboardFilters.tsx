@@ -24,37 +24,45 @@ export function DashboardFilters({
     router.push(`/dashboard?${params.toString()}`);
   }
 
+  const scopeValue = searchParams.get('scope') ?? '';
+  const scopeOptions = [
+    { value: '', label: 'Todos' },
+    ...Object.entries(SCOPE_LABEL).map(([value, label]) => ({ value, label })),
+  ];
+
   const hasActiveFilter = ['scope', 'accountId', 'cardId', 'categoryId'].some((k) => searchParams.get(k));
 
   return (
     <div className="space-y-2">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">
+        {scopeOptions.map((opt) => (
+          <button
+            key={opt.value || 'all'}
+            type="button"
+            onClick={() => setParam('scope', opt.value)}
+            className={cn(
+              'shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors',
+              scopeValue === opt.value ? 'border-brand-600 bg-brand-600 text-cream' : 'border-line bg-cream text-slate-600',
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      <Select
+        aria-label="Categoria"
+        value={searchParams.get('categoryId') ?? ''}
+        onChange={(e) => setParam('categoryId', e.target.value)}
+        className="text-sm"
+      >
+        <option value="">Todas as categorias</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.groupName} · {c.name}
+          </option>
+        ))}
+      </Select>
       <div className="grid grid-cols-2 gap-2">
-        <Select
-          aria-label="Responsável"
-          value={searchParams.get('scope') ?? ''}
-          onChange={(e) => setParam('scope', e.target.value)}
-          className="text-sm"
-        >
-          <option value="">Todos os responsáveis</option>
-          {Object.entries(SCOPE_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label="Categoria"
-          value={searchParams.get('categoryId') ?? ''}
-          onChange={(e) => setParam('categoryId', e.target.value)}
-          className="text-sm"
-        >
-          <option value="">Todas as categorias</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.groupName} · {c.name}
-            </option>
-          ))}
-        </Select>
         <Select
           aria-label="Conta"
           value={searchParams.get('accountId') ?? ''}

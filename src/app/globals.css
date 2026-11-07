@@ -8,9 +8,16 @@ body {
 }
 
 body {
-  background-color: #f8fafc;
+  @apply bg-paper;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+}
+
+.label-caps {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.625rem;
+  line-height: 1;
 }
 
 @supports (padding: max(0px)) {

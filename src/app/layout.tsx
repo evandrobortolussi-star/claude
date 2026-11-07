@@ -1,5 +1,20 @@
 import type { Metadata, Viewport } from 'next';
+import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+  style: ['normal', 'italic'],
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Financeiro Familiar',
@@ -21,13 +36,13 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
-  themeColor: '#14875f',
+  themeColor: '#2f4a3b',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
-      <body className="min-h-dvh antialiased text-slate-900">{children}</body>
+    <html lang="pt-BR" className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable}`}>
+      <body className="min-h-dvh font-sans antialiased text-slate-900">{children}</body>
     </html>
   );
 }

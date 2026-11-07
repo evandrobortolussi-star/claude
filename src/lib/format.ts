@@ -2,6 +2,23 @@ export function formatCentsToBRL(cents: number): string {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+/** Same as formatCentsToBRL but without cents — for tight spaces (hero
+ * numbers, stat tiles) where exact centavos aren't the point. */
+export function formatCentsToBRLCompact(cents: number): string {
+  return (cents / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    maximumFractionDigits: 0,
+  });
+}
+
+/** Up to two initials from a name/description, for avatar-style badges. */
+export function initials(text: string): string {
+  const parts = text.trim().split(/\s+/).slice(0, 2);
+  const letters = parts.map((part) => part.charAt(0).toUpperCase()).join('');
+  return letters || '?';
+}
+
 export function parseBRLToCents(value: string): number {
   const normalized = value
     .replace(/[^\d,.-]/g, '')

@@ -6,6 +6,7 @@ import { listActiveAccounts } from '@/lib/firestore/accounts';
 import { listActiveCards } from '@/lib/firestore/cards';
 import { getCategoryOptions } from '@/lib/categories';
 import { formatCentsToBRL, formatDate, toDateInputValue } from '@/lib/format';
+import { cn } from '@/lib/cn';
 import { Card } from '@/components/ui/Card';
 import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { createTransaction, deleteTransaction } from './actions';
@@ -67,16 +68,22 @@ export default async function TransactionsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Lançamentos</h1>
+        <h1 className="font-display text-lg font-semibold text-slate-900">Lançamentos</h1>
         <p className="text-sm text-slate-500">Receitas e despesas do casal.</p>
       </div>
 
       <div className="flex items-center justify-between">
-        <Link href={monthHref(shiftMonthParam(year, month, -1), searchParams)} className="p-2 text-slate-400">
+        <Link
+          href={monthHref(shiftMonthParam(year, month, -1), searchParams)}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ‹
         </Link>
         <p className="text-sm font-medium capitalize text-slate-900">{monthLabel}</p>
-        <Link href={monthHref(shiftMonthParam(year, month, 1), searchParams)} className="p-2 text-slate-400">
+        <Link
+          href={monthHref(shiftMonthParam(year, month, 1), searchParams)}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ›
         </Link>
       </div>
@@ -95,15 +102,15 @@ export default async function TransactionsPage({
       <div className="grid grid-cols-2 gap-3">
         <Card className="text-center">
           <p className="text-xs text-slate-500">Receitas</p>
-          <p className="mt-1 font-semibold text-income">{formatCentsToBRL(totalIncome)}</p>
+          <p className="mt-1 font-mono font-semibold text-income">{formatCentsToBRL(totalIncome)}</p>
         </Card>
         <Card className="text-center">
           <p className="text-xs text-slate-500">Despesas</p>
-          <p className="mt-1 font-semibold text-expense">{formatCentsToBRL(totalExpense)}</p>
+          <p className="mt-1 font-mono font-semibold text-expense">{formatCentsToBRL(totalExpense)}</p>
         </Card>
       </div>
 
-      <details className="group rounded-2xl border border-slate-100 bg-white shadow-card">
+      <details className="group rounded-2xl border border-line bg-cream shadow-card">
         <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-brand-700">
           + Novo lançamento
         </summary>
@@ -148,7 +155,7 @@ export default async function TransactionsPage({
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3 pl-2">
-              <span className={t.type === 'INCOME' ? 'font-semibold text-income' : 'font-semibold text-expense'}>
+              <span className={cn('font-mono font-semibold', t.type === 'INCOME' ? 'text-income' : 'text-expense')}>
                 {t.type === 'INCOME' ? '+' : '-'}
                 {formatCentsToBRL(t.amountCents)}
               </span>

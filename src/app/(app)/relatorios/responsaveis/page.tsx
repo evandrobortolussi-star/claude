@@ -24,16 +24,22 @@ export default async function ResponsaveisReportPage({ searchParams }: { searchP
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Casal x individuais</h1>
+        <h1 className="font-display text-lg font-semibold text-slate-900">Casal x individuais</h1>
         <p className="text-sm text-slate-500">Quem gastou o quê, todo mês.</p>
       </div>
 
       <div className="flex items-center justify-between">
-        <Link href={`/relatorios/responsaveis?month=${shiftMonthParam(year, month, -1)}`} className="p-2 text-slate-400">
+        <Link
+          href={`/relatorios/responsaveis?month=${shiftMonthParam(year, month, -1)}`}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ‹
         </Link>
         <p className="text-sm font-medium capitalize text-slate-900">{monthLabel}</p>
-        <Link href={`/relatorios/responsaveis?month=${shiftMonthParam(year, month, 1)}`} className="p-2 text-slate-400">
+        <Link
+          href={`/relatorios/responsaveis?month=${shiftMonthParam(year, month, 1)}`}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ›
         </Link>
       </div>
@@ -42,7 +48,7 @@ export default async function ResponsaveisReportPage({ searchParams }: { searchP
         {(Object.keys(SCOPE_LABEL) as ExpenseScope[]).map((scope) => (
           <Card key={scope} className="p-3 text-center">
             <p className="text-[11px] text-slate-500">{SCOPE_LABEL[scope]}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{formatCentsToBRL(byScope[scope])}</p>
+            <p className="mt-1 font-mono text-sm font-semibold text-slate-900">{formatCentsToBRL(byScope[scope])}</p>
             <p className="mt-0.5 text-[10px] text-slate-400">
               {total > 0 ? `${Math.round((byScope[scope] / total) * 100)}%` : '—'}
             </p>

@@ -24,16 +24,22 @@ export default async function EvolucaoReportPage({ searchParams }: { searchParam
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Evolução mensal</h1>
+        <h1 className="font-display text-lg font-semibold text-slate-900">Evolução mensal</h1>
         <p className="text-sm text-slate-500">Receitas e despesas nos últimos 6 meses.</p>
       </div>
 
       <div className="flex items-center justify-between">
-        <Link href={`/relatorios/evolucao?month=${shiftMonthParam(year, month, -1)}`} className="p-2 text-slate-400">
+        <Link
+          href={`/relatorios/evolucao?month=${shiftMonthParam(year, month, -1)}`}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ‹
         </Link>
         <p className="text-sm font-medium capitalize text-slate-900">até {monthLabel}</p>
-        <Link href={`/relatorios/evolucao?month=${shiftMonthParam(year, month, 1)}`} className="p-2 text-slate-400">
+        <Link
+          href={`/relatorios/evolucao?month=${shiftMonthParam(year, month, 1)}`}
+          className="grid size-9 place-items-center rounded-full border border-line bg-cream text-slate-500"
+        >
           ›
         </Link>
       </div>
@@ -46,11 +52,11 @@ export default async function EvolucaoReportPage({ searchParams }: { searchParam
       <div className="grid grid-cols-2 gap-3">
         <Card className="text-center">
           <p className="text-xs text-slate-500">Média de receitas</p>
-          <p className="mt-1 font-semibold text-income">{formatCentsToBRL(avgIncome)}</p>
+          <p className="mt-1 font-mono font-semibold text-income">{formatCentsToBRL(avgIncome)}</p>
         </Card>
         <Card className="text-center">
           <p className="text-xs text-slate-500">Média de despesas</p>
-          <p className="mt-1 font-semibold text-expense">{formatCentsToBRL(avgExpense)}</p>
+          <p className="mt-1 font-mono font-semibold text-expense">{formatCentsToBRL(avgExpense)}</p>
         </Card>
       </div>
     </div>

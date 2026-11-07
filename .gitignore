@@ -8,6 +8,12 @@ dist/
 .env
 .env*.local
 
+# Firebase Admin SDK service account key — only ever used locally, never
+# committed, regardless of what the developer happens to name the file.
+*firebase*adminsdk*.json
+firebase-service-account.json
+serviceAccountKey.json
+
 # prisma local db
 prisma/dev.db
 prisma/dev.db-journal

@@ -26,8 +26,19 @@ export default function RegisterPage() {
     const password = String(formData.get('password'));
     const fullName = String(formData.get('name'));
 
+    let credential;
     try {
-      const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
+      credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
+    } catch (err) {
+      setError(translateError(err instanceof Error ? err.message : ''));
+      setLoading(false);
+      return;
+    }
+
+    // From here on, any failure must roll back the just-created Auth user —
+    // otherwise it's left "orphaned" (login works, but no household/profile
+    // exists), and retrying with the same email then fails as already-in-use.
+    try {
       const idToken = await credential.user.getIdToken();
 
       const signupResponse = await fetch('/api/auth/complete-signup', {
@@ -55,8 +66,9 @@ export default function RegisterPage() {
       });
       router.push('/dashboard');
       router.refresh();
-    } catch (err) {
-      setError(translateError(err instanceof Error ? err.message : ''));
+    } catch {
+      setError('Não foi possível concluir o cadastro. Tente novamente.');
+      await credential.user.delete().catch(() => {});
       setLoading(false);
     }
   }

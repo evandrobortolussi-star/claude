@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase/admin';
 import type { ProfileDoc } from '@/types/firestore';
 
@@ -14,6 +15,50 @@ export type CurrentUser = {
 };
 
 const SESSION_COOKIE = 'session';
+
+// Local-only escape hatch to explore the app's features without going
+// through real sign-up/login — gated behind an env var that only ever
+// exists in a developer's own .env.local, never in a deployed environment.
+// Still writes/reads real Firestore data (not mocked), just skips Firebase
+// Auth. NEVER set DEV_BYPASS_AUTH=true outside local development.
+const DEV_BYPASS = process.env.DEV_BYPASS_AUTH === 'true';
+const DEV_UID = 'local-dev-user';
+const DEV_HOUSEHOLD_ID = 'local-dev-household';
+
+async function ensureDevUser(): Promise<CurrentUser> {
+  const db = getAdminDb();
+  const profileRef = db.doc(`profiles/${DEV_UID}`);
+  const snapshot = await profileRef.get();
+
+  if (!snapshot.exists) {
+    await db.doc(`households/${DEV_HOUSEHOLD_ID}`).set({
+      name: 'Família de Teste',
+      inviteCode: 'TESTE123',
+      currency: 'BRL',
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await profileRef.set({
+      householdId: DEV_HOUSEHOLD_ID,
+      fullName: 'Você (teste)',
+      avatarEmoji: '🧪',
+      spouseSlot: 1,
+      role: 'OWNER',
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  return {
+    id: DEV_UID,
+    email: 'teste@local.dev',
+    householdId: DEV_HOUSEHOLD_ID,
+    fullName: 'Você (teste)',
+    avatarEmoji: '🧪',
+    spouseSlot: 1,
+    role: 'OWNER',
+  };
+}
 
 async function readSessionUser(): Promise<{ uid: string; email?: string } | null> {
   const cookie = cookies().get(SESSION_COOKIE)?.value;
@@ -36,6 +81,8 @@ async function readSessionUser(): Promise<{ uid: string; email?: string } | null
  * sent, so callers can trust it.
  */
 export async function requireCurrentUser(): Promise<CurrentUser> {
+  if (DEV_BYPASS) return ensureDevUser();
+
   const sessionUser = await readSessionUser();
   if (!sessionUser) {
     redirect('/login');
@@ -61,6 +108,8 @@ export async function requireCurrentUser(): Promise<CurrentUser> {
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
+  if (DEV_BYPASS) return ensureDevUser();
+
   const sessionUser = await readSessionUser();
   if (!sessionUser) return null;
 

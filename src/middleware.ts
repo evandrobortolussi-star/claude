@@ -31,6 +31,12 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
 }
 
 export async function middleware(request: NextRequest) {
+  // Same local-only bypass as src/lib/session.ts — never set this outside
+  // local development.
+  if (process.env.DEV_BYPASS_AUTH === 'true') {
+    return NextResponse.next();
+  }
+
   const pathname = request.nextUrl.pathname;
   const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
   const authenticated = await hasValidSession(request);

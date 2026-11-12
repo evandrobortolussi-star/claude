@@ -38,7 +38,8 @@ export async function POST(request: Request) {
   try {
     const decoded = await getAdminAuth().verifyIdToken(body.idToken);
     uid = decoded.uid;
-  } catch {
+  } catch (error) {
+    console.error('complete-signup: verifyIdToken failed:', error);
     return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 });
   }
 
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
       });
     }
   } catch (error) {
+    console.error('complete-signup: household/profile creation failed:', error);
     const message = error instanceof Error ? error.message : 'Não foi possível concluir o cadastro.';
     return NextResponse.json({ error: message }, { status: 400 });
   }

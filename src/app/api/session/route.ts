@@ -22,7 +22,8 @@ export async function POST(request: Request) {
       path: '/',
     });
     return response;
-  } catch {
+  } catch (error) {
+    console.error('session: createSessionCookie failed:', error);
     return NextResponse.json({ error: 'Não foi possível criar a sessão.' }, { status: 401 });
   }
 }

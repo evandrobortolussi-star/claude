@@ -19,9 +19,17 @@ function getAdminApp(): App {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
   if (serviceAccountJson) {
-    return initializeApp({
-      credential: cert(JSON.parse(serviceAccountJson)),
-    });
+    let parsed: object;
+    try {
+      parsed = JSON.parse(serviceAccountJson);
+    } catch (error) {
+      console.error(
+        'FIREBASE_SERVICE_ACCOUNT_KEY is not valid JSON — paste the full contents of the service account file, unedited.',
+        error,
+      );
+      throw error;
+    }
+    return initializeApp({ credential: cert(parsed) });
   }
 
   // On Firebase App Hosting (and most Google Cloud runtimes) the attached

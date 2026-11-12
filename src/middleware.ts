@@ -2,6 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
+// These establish a session (or complete sign-up before one exists) — each
+// verifies its own Firebase ID token internally, so they must be callable
+// with no session cookie yet. Gating them behind "already authenticated"
+// made login/register impossible: the very call that creates the session
+// was itself redirected to /login for not having one.
+const AUTH_API_PATHS = ['/api/session', '/api/auth/complete-signup'];
 const SESSION_COOKIE = 'session';
 
 // Firebase session cookies (and ID tokens) are RS256-signed by Google's
@@ -38,6 +44,11 @@ export async function middleware(request: NextRequest) {
   }
 
   const pathname = request.nextUrl.pathname;
+
+  if (AUTH_API_PATHS.some((path) => pathname.startsWith(path))) {
+    return NextResponse.next();
+  }
+
   const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
   const authenticated = await hasValidSession(request);
 
